@@ -1,0 +1,190 @@
+---
+title: "Predicting Per-Unit Prices of Hass Avocados"
+author: "Yunyao Zhu"
+date: "3/1/2021"
+output: pdf_document
+number_sections: true
+fig_caption: yes
+header-includes: 
+  - \usepackage{breqn}
+  - \usepackage{amsmath}
+bibliography: sources.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(lubridate) # extract month
+library(choroplethr) # Census data
+library(choroplethrMaps) # Census maps
+```
+
+
+# Introduction
+In 2017, an Australian property developer claimed that millennials were spending too much money on avocado toast instead of saving for their first home [@Millennials]. While the millennial avocado toast stereotype is by no means convincing, avocados are indeed a favored fruit in the U.S. According to a market report [@Market], the U.S. is the world’s biggest importer of avocados. As more health benefits about avocados are discovered and promoted, demand surged even more and so did the price. The goal of this project is to investigate whether we can reasonably predict the price of avocados based on past prices and geographical data.
+
+## Existing Literature
+A study [@Forecasting] investigated the various factors that might influence the avocado market. The researchers predicted that the avocado prices would likely decrease in the 2009-2010 season due to an increase in supplies and a probable decrease in demand caused by the financial crisis. Since the study was conducted over ten years ago, it seems be interesting to examine if the avocado market has changed over the years and if we can still predict the avocado prices given its supposed volatility in recent years.
+
+## Data
+The dataset used in this analysis comes from the publicly accessible Kaggle Avocado Prices dataset, which credited the Hass Avocado Board for the collection and release of the data. This dataset contains 13 variables encompassing the per-unit prices, total volumes, regions, and sizes of Hass avocados, a cultivar of avocados. Data from the start of 2015 to the end of the first quarter of 2018 are available. Each entry represents one observation from one region in the U.S. during one week. There are over 18,000 entries in total.
+
+There are 54 unique regions in the dataset. One of these regions, denoted by `TotalUS`, encompasses the avocado volumes in the country as a whole. Another 8 regions corresponds to large geographical divisions of the U.S. such as the `Northeast` region, `Southwest` region, etc. The remaining regions represent smaller geographical areas in a less consistent way, sometimes referring to a single city in a state (e.g. `Chicago`) while other times denoting cities across states (e.g. `BaltimoreWashington`). Some regions can also be ambiguous - cities such as `Albany` and `Jacksonville` can be found in more than one state. Thus, to manage the location data consistently and unambiguously, we choose to focus on the 8 geographical regions.
+
+To enrich the current dataset with demographic data, the `df_state_demographics` dataset from the `choroplethr` package [@Choroplethr] is aggregated and combined with the mean per-unit prices of Hass avocados (over the per-unit prices each week from 2015 to 2018) in each of the 8 geographical regions. Selected demographic data include the total population in the region, the average percentage of white population and black population, the average per capita income, and the average median age. (The averages are weighted by the population in the states in each geographical region).
+
+## Research Goals
+#### Predicting the per-unit prices of Hass avocados
+Specifically, we want to use the data from 2015 to the first quarter of 2017 to predict the avocado prices in the following year. Doing so allows us to compare the predicted prices with the recorded prices and evaluate the accuracy of the predictions. Predicting one year of avocado prices enables us to examine any seasonal variations in pricing.
+
+#### Investigating whether spatial relationships exist
+Does the region (where the observations were made) have any significant impact on the per-unit price of the avocados? If such spatial relationships are found, what might be some potential implications?
+
+## Exploratory Data Analysis
+```{r data-preprocessing}
+df = read.csv('avocado.csv')
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+
+df$Date = as.Date(df$Date, "%Y-%m-%d")
+df$Month = month(df$Date)
+df = df[order(df$Date), ]
+
+df = df %>%
+  rename(
+    Average.Price = 'AveragePrice',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'region'
+  )
+```
+
+```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S."}
+ggplot(data = df[df$Region == 'TotalUS', ], aes(x = Date, y = Average.Price)) +
+  geom_line(aes(color=Type)) +
+  labs(x='Time (Weeks)', y='Average Price ($)', title='Per-unit Prices of Hass Avocados Increase Yearly', subtitle='Organic Avocados More Expensive than Conventional Avocados')
+```
+
+From the plot above, we see the the per-unit price of Hass avocados increases every year from 2015 to 2018. Seasonal trends within each year also seem to exist, with lower prices in first two quarters and higher prices in the last two quarters. Expectedly, the prices of organic avocados are almost always higher than those of conventional avocados, suggesting that the type of avocados can be a predictor in the price prediction model. Further analysis is required to investigate the sudden drop in price of organic avocados in mid-2015.
+
+\newpage
+
+```{r}
+df.total.conventional = df[(df$Region == 'TotalUS') & (df$Type == 'conventional'), ]
+df.total.organic = df[(df$Region == 'TotalUS') & (df$Type == 'organic'), ]
+```
+
+```{r fig.height = 4.5, fig.width = 5, fig.cap="Time Series Plot of Per-unit Prices of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+
+avg_price_in_weeks <- ts(df.total.conventional$Average.Price, frequency = 52)
+plot(stl(avg_price_in_weeks, s.window = "periodic"), main='Per-unit Price of Conventional Avocados\nShow Seasonal Trend', labels = c('Price', 'Seasonal', 'Trend', 'Remainder'))
+title(sub="Number of Years (starting from 2015)")
+```
+
+The plot above is the time series plot of the per-unit prices of conventional avocados in U.S. The plot of organic avocados shows very similar results. Compared to the Figure 1, this plot shows more directly the seasonal trends. We observe that the prices peak during the third quarter of each year and decrease to the lowest during the first quarter.
+
+\newpage
+
+```{r}
+# https://www.maths.usyd.edu.au/u/UG/SM/STAT3022/r/current/Lecture/lecture21_2020JC.pdf
+
+data(df_state_demographics)
+
+overall = c('TotalUS')
+regions = c('California','West','Plains','SouthCentral','GreatLakes','Midsouth','Southeast','Northeast')
+
+states_California = c('california')
+states_West = c('washington','oregon','nevada','idaho','montana','wyoming','utah','colorado','new mexico','arizona')
+states_Plains = c('north dakota', 'south dakota', 'nebraska', 'kansas', 'minnesota', 'iowa', 'missouri')
+states_SouthCentral = c('arkansas', 'louisiana', 'oklahoma', 'texas')
+states_GreatLakes = c('wisconsin', 'illinois', 'michigan', 'ohio', 'indiana')
+states_Midsouth = c('kentucky', 'west virginia', 'tennessee', 'virginia', 'north carolina', 'maryland', 'delaware', 'district of columbia')
+states_Southeast = c('mississippi','alabama','georgia','south carolina','florida')
+states_Northeast = c('new jersey','pennsylvania','new york','connecticut','rhode island','massachusetts','vermont','new hampshire','maine')
+```
+
+```{r}
+# https://stackoverflow.com/questions/11612235/select-rows-from-a-data-frame-based-on-values-in-a-vector
+df_state_demographics_California = df_state_demographics[df_state_demographics$region %in% states_California,]
+df_state_demographics_California$sales_region = 'California'
+
+df_state_demographics_West = df_state_demographics[df_state_demographics$region %in% states_West,]
+df_state_demographics_West$sales_region = 'West'
+
+df_state_demographics_Plains = df_state_demographics[df_state_demographics$region %in% states_Plains,]
+df_state_demographics_Plains$sales_region = 'Plains'
+
+df_state_demographics_SouthCentral = df_state_demographics[df_state_demographics$region %in% states_SouthCentral,]
+df_state_demographics_SouthCentral$sales_region = 'SouthCentral'
+
+df_state_demographics_GreatLakes = df_state_demographics[df_state_demographics$region %in% states_GreatLakes,]
+df_state_demographics_GreatLakes$sales_region = 'GreatLakes'
+
+df_state_demographics_Midsouth = df_state_demographics[df_state_demographics$region %in% states_Midsouth,]
+df_state_demographics_Midsouth$sales_region = 'Midsouth'
+
+df_state_demographics_Southeast = df_state_demographics[df_state_demographics$region %in% states_Southeast,]
+df_state_demographics_Southeast$sales_region = 'Southeast'
+
+df_state_demographics_Northeast = df_state_demographics[df_state_demographics$region %in% states_Northeast,]
+df_state_demographics_Northeast$sales_region = 'Northeast'
+
+
+df_new = rbind(df_state_demographics_California,
+               df_state_demographics_West,
+               df_state_demographics_Plains,
+               df_state_demographics_SouthCentral,
+               df_state_demographics_GreatLakes,
+               df_state_demographics_Midsouth,
+               df_state_demographics_Southeast,
+               df_state_demographics_Northeast)
+```
+
+```{r}
+df_new = df_new %>% 
+   group_by(sales_region) %>% 
+   mutate(sales_region_total_population=sum(total_population)) %>%
+   mutate(weighted_percent_white=weighted.mean(x=percent_white, w=total_population)) %>%
+   mutate(weighted_percent_black=weighted.mean(x=percent_black, w=total_population)) %>%
+   mutate(weighted_per_capita_income=weighted.mean(x=per_capita_income, w=total_population)) %>%
+   mutate(weighted_median_age=weighted.mean(x=median_age, w=total_population))
+```
+
+```{r}
+df_sales_regions = df_new %>% group_by(sales_region) %>%
+    summarize(sales_region_total_population = mean(sales_region_total_population),
+              weighted_percent_white = mean(weighted_percent_white),
+              weighted_percent_black = mean(weighted_percent_black),
+              weighted_per_capita_income = mean(weighted_per_capita_income),
+              weighted_median_age = mean(weighted_median_age))
+```
+
+```{r}
+df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% group_by(Region) %>%
+    summarize(Region.Average.Price = mean(Average.Price)))
+```
+
+```{r fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions"}
+# https://stackoverflow.com/questions/15624656/label-points-in-geom-point
+ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.Average.Price)) +
+  geom_point() + 
+  geom_text(aes(label=sales_region),hjust=0.5, vjust=-0.4) +
+  xlim(24500, 33000) +
+  labs(title = 'Average Per-Unit Price Higher\nin Regions with Higher Per Capita Income',
+         x = 'Weighted Average of Per Capita Income\nAcross States in the Regions ($)',
+         y = 'Average Per-Unit Price\nof Hass Avocados ($)')
+```
+
+
+In general, it seems that the regions with higher per capita income also have higher per-unit avocado prices. (Additional scatter plots show similar trends with higher median age and higher percentage of white population). An exception is the Southeast region, which has the lowest per capita income but a relatively high per-unit avocado price. Further analysis is required to better explain this observation.
+
+\newpage
+
+## Bibliography
