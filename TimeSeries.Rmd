@@ -1,7 +1,7 @@
 ---
-title: "Predicting Per-Unit Prices of Hass Avocados"
+title: "TimeSeries"
 author: "Yunyao Zhu"
-date: "3/1/2021"
+date: "3/15/2021"
 output: pdf_document
 number_sections: true
 fig_caption: yes
@@ -12,13 +12,13 @@ bibliography: sources.bib
 nocite: '@*'
 ---
 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
 library(tidyverse)
 library(lubridate) # extract month
 library(choroplethr) # Census data
 library(choroplethrMaps) # Census maps
-library(forecast)
 ```
 
 
@@ -42,7 +42,6 @@ Specifically, we want to use the data from 2015 to the first quarter of 2017 to 
 #### Investigating whether spatial relationships exist
 Does the region (where the observations were made) have any significant impact on the per-unit price of the avocados? If such spatial relationships are found, what might be some potential implications?
 
-
 ## Exploratory Data Analysis
 ```{r data-preprocessing}
 df = read.csv('avocado.csv')
@@ -51,7 +50,6 @@ df = read.csv('avocado.csv')
 
 df$Date = as.Date(df$Date, "%Y-%m-%d")
 df$Month = month(df$Date)
-df$Year.Month <- format(as.Date(df$Date), "%Y-%m")
 df = df[order(df$Date), ]
 
 df = df %>%
@@ -66,28 +64,13 @@ df = df %>%
   )
 ```
 
-```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S.", eval = F}
+```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S."}
 ggplot(data = df[df$Region == 'TotalUS', ], aes(x = Date, y = Average.Price)) +
   geom_line(aes(color=Type)) +
   labs(x='Time (Weeks)', y='Average Price ($)', title='Per-unit Prices of Hass Avocados Increase Yearly', subtitle='Organic Avocados More Expensive than Conventional Avocados')
 ```
 
-## Smoothing by month
-```{r}
-# https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
-df.total.month = df[df$Region == 'TotalUS', ] %>%
-                              group_by(Year.Month, Type) %>%
-                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
-```
-
-```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Monthly Average Prices of Hass Avocados Over Time in the U.S."}
-ggplot(data = df.total.month[df.total.month$Type == 'conventional', ], aes(x = Date, y = Average.Price)) +
-  geom_line() +
-  labs(x='Time (Months)', y='Average Price ($)', title='Per-unit Prices of Conventional Hass Avocados Increase Yearly')
-```
-
-From the plot above, we see the the per-unit price of the conventional Hass avocados increases every year from 2015 to 2018. Seasonal trends within each year also seem to exist, with lower prices in first two quarters and higher prices in the last two quarters. The plot of organic avocados shows very similar results.
-
+From the plot above, we see the the per-unit price of Hass avocados increases every year from 2015 to 2018. Seasonal trends within each year also seem to exist, with lower prices in first two quarters and higher prices in the last two quarters. Expectedly, the prices of organic avocados are almost always higher than those of conventional avocados, suggesting that the type of avocados can be a predictor in the price prediction model. Further analysis is required to investigate the sudden drop in price of organic avocados in mid-2015.
 
 \newpage
 
@@ -140,10 +123,10 @@ df_state_demographics_Plains = df_state_demographics[df_state_demographics$regio
 df_state_demographics_Plains$sales_region = 'Plains'
 
 df_state_demographics_SouthCentral = df_state_demographics[df_state_demographics$region %in% states_SouthCentral,]
-df_state_demographics_SouthCentral$sales_region = 'South Central'
+df_state_demographics_SouthCentral$sales_region = 'SouthCentral'
 
 df_state_demographics_GreatLakes = df_state_demographics[df_state_demographics$region %in% states_GreatLakes,]
-df_state_demographics_GreatLakes$sales_region = 'Great Lakes'
+df_state_demographics_GreatLakes$sales_region = 'GreatLakes'
 
 df_state_demographics_Midsouth = df_state_demographics[df_state_demographics$region %in% states_Midsouth,]
 df_state_demographics_Midsouth$sales_region = 'Midsouth'
@@ -210,20 +193,156 @@ In general, it seems that the regions with higher per capita income also have hi
 ### Model Specification
 
 ```{r}
+auto.arima(avg_price_in_weeks, d=1, seasonal = TRUE)
+```
+
+```{r}
+fit.week <- arima(avg_price_in_weeks[1:140], order = c(0,1,0), seasonal = list(order=c(0,1,1), period = 52))
+pre.week <- predict(fit.week, n.ahead = 29)
+matplot(1:29, cbind(avg_price_in_weeks[141:169], pre.week$pred), type = "l", xlab = "Weeks", ylab = "Average Price across the US ($)", main = "autoARIMA")
+```
+
+```{r}
+fweekcast <- forecast(fit.week, h = 29)
+{plot(fweekcast, main = expression("auto.ARIMA(1,0,3)(1,1,0)"[52]))
+lines(ts(avg_price_in_weeks))}
+```
+
+
+
+```{r}
+acf(df.total.conventional$Average.Price, lag.max = 52,main = "")
+```
+
+```{r}
+avg_price_in_weeks.diff <- diff(df.total.conventional$Average.Price, difference = 1)
+acf(avg_price_in_weeks.diff, lag.max = 52,main = "")
+```
+
+```{r}
+pacf(df.total.conventional$Average.Price, lag.max = 52,main = "")
+```
+
+```{r}
+pacf(avg_price_in_weeks.diff, lag.max=52,main = "")
+```
+
+```{r}
+man.fit.week <- arima(avg_price_in_weeks[1:140], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, n.ahead=29)
+matplot(1:29, cbind(avg_price_in_weeks[141:169], man.pre.week$pred), type = "l", xlab = "Weeks", ylab = "Average Price across the US ($)", main = "Manual ARIMA 29 weeks")
+```
+
+```{r}
+library(forecast)
+fmanweek1 <- forecast(man.fit.week, h=29)
+{plot(fmanweek1, main = expression("ARIMA(6,0,1)(1,1,1)"[52]))
+lines(ts(avg_price_in_weeks))}
+```
+
+```{r}
+man.fit.week <- arima(avg_price_in_weeks[1:117], order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, n.ahead=52)
+matplot(1:52, cbind(avg_price_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks", ylab = "Average Price across the US ($)", main = "Manual ARIMA 52 weeks")
+```
+
+```{r}
+df.total.conventional
+```
+
+```{r}
+ggplot(data = df.total.conventional, aes(x =log(Total.Volume), y = Average.Price)) +
+  geom_point()
+  
+```
+
+
+```{r}
+fmanweek1 <- forecast(man.fit.week, h=52)
+{plot(fmanweek1, main = expression("ARIMA(6,0,1)(1,1,1)"[52]))
+lines(ts(avg_price_in_weeks))}
+```
+
+```{r}
 man.fit.week <- Arima(avg_price_in_weeks[1:117], xreg=(df.total.conventional[,"Total.Volume"])[1:117], order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 52))
 man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Total.Volume"])[118:169],  n.ahead=52)
 matplot(1:52, cbind(avg_price_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks", ylab = "Average Price across the US ($)", main = "Manual ARIMA 52 weeks")
 ```
 
+
+
 ```{r}
 fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Total.Volume"])[118:169], h=52)
-{plot(fmanweek1, main = expression("ARIMA(1,0,0)(0,1,1)"[52]))
+{plot(fmanweek1, main = expression("ARIMA(6,0,1)(1,1,1)"[52]))
 lines(ts(avg_price_in_weeks))}
 ```
 
-## Appendix
+
+
+
+```{r}
+(fit <- auto.arima(df.total.conventional[,"Average.Price"],
+  xreg=df.total.conventional[,"Total.Volume"]))
+```
+
 ```{r}
 checkresiduals(man.fit.week)
+```
+
+```{r}
+fcast <- forecast(fit, xreg=rep(mean(df.total.conventional[,'Total.Volume']),8))
+autoplot(fcast) + xlab("Year") +
+  ylab("Percentage change")
+```
+
+```{r}
+rep(mean(df.total.conventional[,'Total.Volume']),8)
+```
+
+
+
+## Change to monthly instead of weekly
+```{r eval=F}
+# https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
+df.total.conventional.month = df.total.conventional %>%
+                              group_by(Year, Month) %>%
+                              summarise_at(vars(Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+```
+
+```{r eval=F}
+acf(df.total.conventional.month$Average.Price, lag.max = 12, main = "")
+```
+
+```{r eval=F}
+avg_price_in_months.diff <- diff(df.total.conventional.month$Average.Price, difference = 1)
+acf(avg_price_in_months.diff, lag.max = 12,main = "")
+```
+
+```{r eval=F}
+pacf(df.total.conventional.month$Average.Price, lag.max = 12,main = "")
+```
+
+```{r eval=F}
+pacf(avg_price_in_months.diff, lag.max=12,main = "")
+```
+
+```{r eval=F}
+avg_price_in_months <- ts(df.total.conventional.month$Average.Price, frequency = 12)
+plot(stl(avg_price_in_months, s.window = "periodic"), main='Per-unit Price (Monthly) of Conventional Avocados\nShow Seasonal Trend', labels = c('Price', 'Seasonal', 'Trend', 'Remainder'))
+title(sub="Number of Years (starting from 2015)")
+```
+
+```{r eval=F}
+man.fit.month <- arima(avg_price_in_months[1:27], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 12))
+man.pre.month <- predict(man.fit.month, n.ahead=12)
+matplot(1:12, cbind(avg_price_in_months[28:39], man.pre.month$pred), type = "l", xlab = "Months", ylab = "Average Price across the US ($)", main = "Manual ARIMA 12 months")
+```
+
+```{r eval=F}
+library(forecast)
+fmanmonth1 <- forecast(man.fit.month, h=12)
+{plot(fmanmonth1, main = expression("ARIMA(6,0,1)(1,1,1)"[12]))
+lines(ts(avg_price_in_months))}
 ```
 
 
