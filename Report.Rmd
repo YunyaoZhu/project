@@ -28,7 +28,7 @@ In 2017, an Australian property developer claimed that millennials were spending
 A study [@Forecasting] investigated the various factors that might influence the avocado market. The researchers predicted that the avocado prices would likely decrease in the 2009-2010 season due to an increase in supplies and a probable decrease in demand caused by the financial crisis. Since the study was conducted over ten years ago, it seems be interesting to examine if the avocado market has changed over the years and if we can still predict the avocado prices given its supposed volatility in recent years.
 
 ## Data
-The dataset used in this analysis comes from the publicly accessible Kaggle Avocado Prices dataset, which credited the Hass Avocado Board for the collection and release of the data. This dataset contains 13 variables encompassing the per-unit prices, total volumes, regions, and sizes of Hass avocados, a cultivar of avocados. Data from the start of 2015 to the end of the first quarter of 2018 are available. Each entry represents one observation from one region in the U.S. during one week. There are over 18,000 entries in total. Details of data encoding are provided in the appendix.
+The dataset used in this analysis is the publicly accessible Kaggle Avocado Prices dataset, which credited the Hass Avocado Board for the collection and release of the data. This dataset contains 13 variables encompassing the per-unit prices, total volumes, regions, and sizes of Hass avocados, a cultivar of avocados. Data from the start of 2015 to the end of the first quarter of 2018 are available. Each entry represents one observation from one region in the U.S. during one week. There are over 18,000 entries in total. Details of data encoding are provided in the appendix.
 
 To enrich this dataset, we join it with the U.S. State Demographics dataset from the `choroplethr` package [@Choroplethr]. Selected demographic data include the total population in the region, the average percentage of white and black population, the average per capita income, and the average median age.
 
@@ -89,7 +89,7 @@ df.total.conventional = df[(df$Region == 'TotalUS') & (df$Type == 'conventional'
 df.total.organic = df[(df$Region == 'TotalUS') & (df$Type == 'organic'), ]
 ```
 
-```{r fig.height = 3.1, fig.width = 6, fig.cap="Time Series Plot of Per-unit Prices of Conventional Avocados in the U.S."}
+```{r fig.height = 3.2, fig.width = 6, fig.cap="Time Series Plot of Per-unit Prices of Conventional Avocados in the U.S."}
 # time series plots: 
 # https://otexts.com/fpp2/ts-objects.html
 # https://otexts.com/fpp2/stl.html
@@ -102,17 +102,18 @@ avg_price_in_weeks %>% decompose(type="multiplicative") %>%
   ggtitle("Prices of Conventional Avocados Show Seasonal Pattern")
 ```
 
-The per-unit price of the conventional Hass avocados increases every year from 2015 to 2018 and exhibit easonal trends: prices peak during in third quarter and drop to the lowest in the first quarter. Organic avocados have very similar results.
+The per-unit price of the conventional avocados increases yearly and exhibit seasonal trends. Prices peak in the third quarter and drop to the lowest in the first quarter. Organic avocados show very similar results.
 
 ```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
 ggplot(data = df.total.conventional, aes(x = Total.Volume, y = Average.Price)) +
   geom_point() +
-  labs(title = 'Potential Inverse Relationship between Per-Unit Price and Total Volume',
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Price and Total Volume',
        x = 'Total Number of Avocados Sold',
        y = 'Per-Unit Price ($)')
 ```
 
-A inverse relationship seems to exist between the per-unit price and the total sales volume of the conventional Hass avocados.
+An inverse relationship seems to exist between the per-unit price and the total sales volume of the conventional avocados.
 
 ```{r}
 # https://www.maths.usyd.edu.au/u/UG/SM/STAT3022/r/current/Lecture/lecture21_2020JC.pdf
@@ -194,10 +195,10 @@ df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% grou
 ```
 
 \newpage
-```{r fig.height = 3.7, fig.width = 7.2, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions"}
+```{r fig.height = 3.7, fig.width = 7.8, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions"}
 # https://stackoverflow.com/questions/15624656/label-points-in-geom-point
 ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.Average.Price)) +
-  geom_point(colour = "dark grey", size = 1) + 
+  geom_point(colour = "dark grey", size = 1) + geom_smooth(method = "lm", col='grey') + 
   geom_text(aes(label=sales_region),hjust=0.5, vjust=-0.3) +
   xlim(24500, 33000) +
   labs(title = 'Prices Higher in Regions with Higher Per Capita Income',
@@ -217,7 +218,7 @@ $$(1-\phi_1L)(1-L^{52})y_t=\delta + (1+\Theta_1L)w_t$$
 $$y_t - y_{t-52} = \delta + w_t + \Theta_1 w_{t-52}$$
 $$y_t = \delta + y_{t-52} + w_t + \Theta_1 w_{t-52}$$
 
-The parameter $p$ is the number of time lags fo the autoregressive (AR) model, $d$ is the degree of differencing, and $q$ is the order of the moving-average (MA) model. The uppercase $P, D, Q$ denote the autoregressive, differencing, and moving average terms for the seasonal part of the ARIMA model [@ARIMA_Notation]. The values of the parameters are determined using principles from the Box–Jenkins method [@ARIMA_Box_Jenkins].
+The parameter $p$ is the number of time lags for the autoregressive (AR) model, $d$ is the degree of differencing, and $q$ is the order of the moving-average (MA) model. The uppercase $P, D, Q$ denote the autoregressive, differencing, and moving average terms for the seasonal part of the ARIMA model [@ARIMA_Notation]. The values of the parameters are determined using principles from the Box–Jenkins method [@ARIMA_Box_Jenkins].
 
 \newpage
 
@@ -227,13 +228,18 @@ man.fit.week <- Arima(avg_price_in_weeks[1:117], xreg=(df.total.conventional[,"T
 man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Total.Volume"])[118:169],  n.ahead=52)
 
 par(cex=0.7, mfrow=c(1,2)) 
+par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
 matplot(1:52, cbind(avg_price_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks (03/2017-03/2018)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+
+par(mai=c(0.8,0.5,0.8,0.2))
 fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Total.Volume"])[118:169], h=52)
-{plot(fmanweek1, main = "Prediction with Uncertainty", xlab = 'Weeks (2015-2018)')
+{plot(fmanweek1, main = "Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
 lines(ts(avg_price_in_weeks))}
 ```
 
-The predicted per-unit prices for the first 10 weeks and between week 35 and week 45 are relatively close to the observed prices (differ by less than $0.1). The predicted prices between week 25 and 35 exhibit a similar pattern to the actual prices between week 20 and 30 - the predictions seem to lag by roughly 5 weeks.
+The predicted per-unit prices for weeks 0-10 and weeks 35-48 are relatively close to the observed prices (differ by less than $0.1). The predicted prices for weeks 25-35 exhibit a similar pattern to the actual prices for weeks 20-30, i.e. the predictions seem to lag by roughly 5 weeks.
 
 
 \newpage
