@@ -1,0 +1,227 @@
+---
+title: "introduction"
+author: "Yunyao Zhu"
+date: "2/28/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate) # extract month
+```
+
+
+```{r}
+df = read.csv('avocado.csv')
+head(df)
+```
+
+```{r}
+length(which(is.na(df)))
+```
+
+```{r}
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+
+df$Date = as.Date(df$Date, "%Y-%m-%d")
+df$Month = month(df$Date)
+df = df[order(df$Date), ]
+
+df = df %>%
+  rename(
+    Average.Price = 'AveragePrice',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'region'
+  )
+```
+
+```{r}
+df.total.conventional = df[(df$Region == 'TotalUS') & (df$Type == 'conventional'), ]
+df.total.organic = df[(df$Region == 'TotalUS') & (df$Type == 'organic'), ]
+```
+
+
+```{r}
+ggplot(data = df.total.conventional, aes(x = Date, y = Average.Price)) +
+  geom_line()
+```
+
+```{r}
+ggplot(data = df.total.organic, aes(x = Date, y = Average.Price)) +
+  geom_line()
+```
+
+```{r}
+ggplot(data = df[df$Region == 'TotalUS', ], aes(x = Date, y = Average.Price)) +
+  geom_line(aes(color=Type))
+```
+
+```{r}
+ggplot() +
+  geom_line(data = df[df$Region == 'TotalUS' & df$Year == 2015, ], aes(x = Date, y = Average.Price), color = 'blue') +
+  geom_line(data = df[df$Region == 'TotalUS' & df$Year == 2016, ], aes(x = Date, y = Average.Price))
+```
+
+
+
+```{r}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+
+avg_price_in_weeks <- ts(df.total.conventional$Average.Price, frequency = 52)
+plot(stl(avg_price_in_weeks, s.window = "periodic", robust=TRUE))
+```
+
+```{r}
+df_by_region <- df[df$Region != 'TotalUS', ] %>% 
+  group_by(Region) %>% 
+  summarise(Average.Price = mean(Average.Price))
+df_by_region = df_by_region[order(df_by_region$Average.Price, decreasing=TRUE), ]
+```
+
+```{r, eval=FALSE}
+avg_price_in_weeks <- ts(df.total.organic$Average.Price, frequency = 52)
+plot(stl(avg_price_in_weeks, s.window = "periodic", robust=TRUE))
+```
+
+```{r}
+ggplot(data=df_by_region[1:10, ], aes(x=Average.Price, y=reorder(Region, Average.Price, sum))) +
+  geom_col() +
+  labs(x='Per-unit Price ($)', y = 'Region')
+```
+
+```{r}
+library(choroplethr)
+library(choroplethrMaps)
+data(df_pop_state)
+```
+
+```{r}
+state_choropleth(df_pop_state)
+```
+
+
+```{r}
+library(ggmap)
+register_google("< your api key >")
+state_choropleth(df_pop_state, 
+                 num_colors = 1,
+                 zoom = c("california", "oregon", "washington"),
+                 reference_map = FALSE)
+```
+
+```{r}
+data(df_state_demographics)
+View(df_state_demographics)
+```
+
+
+```{r}
+df_state_demographics$value = df_state_demographics$per_capita_income
+state_choropleth(df_state_demographics, title = '2013 State Per Capita Income Estimates', legend = 'Dollars')
+```
+
+```{r}
+df_state_demographics$value = df_state_demographics$median_age
+state_choropleth(df_state_demographics, num_colors = 2, title = '2013 State Median Age', legend = 'Median Age', zoom = c("california", "oregon", "washington", "wisconsin"))
+```
+
+
+```{r}
+# https://www.maths.usyd.edu.au/u/UG/SM/STAT3022/r/current/Lecture/lecture21_2020JC.pdf
+
+data(df_state_demographics)
+
+overall = c('TotalUS')
+regions = c('California','West','Plains','SouthCentral','GreatLakes','Midsouth','Southeast','Northeast')
+
+states_California = c('california')
+states_West = c('washington','oregon','nevada','idaho','montana','wyoming','utah','colorado','new mexico','arizona')
+states_Plains = c('north dakota', 'south dakota', 'nebraska', 'kansas', 'minnesota', 'iowa', 'missouri')
+states_SouthCentral = c('arkansas', 'louisiana', 'oklahoma', 'texas')
+states_GreatLakes = c('wisconsin', 'illinois', 'michigan', 'ohio', 'indiana')
+states_Midsouth = c('kentucky', 'west virginia', 'tennessee', 'virginia', 'north carolina', 'maryland', 'delaware', 'district of columbia')
+states_Southeast = c('mississippi','alabama','georgia','south carolina','florida')
+states_Northeast = c('new jersey','pennsylvania','new york','connecticut','rhode island','massachusetts','vermont','new hampshire','maine')
+```
+
+```{r}
+# https://stackoverflow.com/questions/11612235/select-rows-from-a-data-frame-based-on-values-in-a-vector
+df_state_demographics_California = df_state_demographics[df_state_demographics$region %in% states_California,]
+df_state_demographics_California$sales_region = 'California'
+
+df_state_demographics_West = df_state_demographics[df_state_demographics$region %in% states_West,]
+df_state_demographics_West$sales_region = 'West'
+
+df_state_demographics_Plains = df_state_demographics[df_state_demographics$region %in% states_Plains,]
+df_state_demographics_Plains$sales_region = 'Plains'
+
+df_state_demographics_SouthCentral = df_state_demographics[df_state_demographics$region %in% states_SouthCentral,]
+df_state_demographics_SouthCentral$sales_region = 'SouthCentral'
+
+df_state_demographics_GreatLakes = df_state_demographics[df_state_demographics$region %in% states_GreatLakes,]
+df_state_demographics_GreatLakes$sales_region = 'GreatLakes'
+
+df_state_demographics_Midsouth = df_state_demographics[df_state_demographics$region %in% states_Midsouth,]
+df_state_demographics_Midsouth$sales_region = 'Midsouth'
+
+df_state_demographics_Southeast = df_state_demographics[df_state_demographics$region %in% states_Southeast,]
+df_state_demographics_Southeast$sales_region = 'Southeast'
+
+df_state_demographics_Northeast = df_state_demographics[df_state_demographics$region %in% states_Northeast,]
+df_state_demographics_Northeast$sales_region = 'Northeast'
+
+
+df_new = rbind(df_state_demographics_California,
+               df_state_demographics_West,
+               df_state_demographics_Plains,
+               df_state_demographics_SouthCentral,
+               df_state_demographics_GreatLakes,
+               df_state_demographics_Midsouth,
+               df_state_demographics_Southeast,
+               df_state_demographics_Northeast)
+```
+
+```{r}
+df_new = df_new %>% 
+   group_by(sales_region) %>% 
+   mutate(sales_region_total_population=sum(total_population)) %>%
+   mutate(weighted_percent_white=weighted.mean(x=percent_white, w=total_population)) %>%
+   mutate(weighted_percent_black=weighted.mean(x=percent_black, w=total_population)) %>%
+   mutate(weighted_per_capita_income=weighted.mean(x=per_capita_income, w=total_population)) %>%
+   mutate(weighted_median_age=weighted.mean(x=median_age, w=total_population))
+```
+
+```{r}
+df_sales_regions = df_new %>% group_by(sales_region) %>%
+    summarize(sales_region_total_population = mean(sales_region_total_population),
+              weighted_percent_white = mean(weighted_percent_white),
+              weighted_percent_black = mean(weighted_percent_black),
+              weighted_per_capita_income = mean(weighted_per_capita_income),
+              weighted_median_age = mean(weighted_median_age))
+```
+
+```{r}
+df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% group_by(Region) %>%
+    summarize(Region.Average.Price = mean(Average.Price)))
+```
+
+```{r fig.height = 2, fig.width = 3, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Median Age"}
+# https://stackoverflow.com/questions/15624656/label-points-in-geom-point
+ggplot(data = df_sales_regions, aes(x = weighted_median_age, y = Region.Average.Price)) +
+  geom_point() + 
+  geom_text(aes(label=sales_region),hjust=0.5, vjust=-0.5) +
+  labs(title = 'Average Per-Unit Price Higher\nin Regions with Higher Median Age',
+         x = 'Weighted Average of\nMedian Age Across States in the Regions ($)',
+         y = 'Average Per-Unit Price of Hass Avocados ($)')
+```
