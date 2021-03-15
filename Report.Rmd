@@ -201,7 +201,7 @@ ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.A
   geom_point(colour = "dark grey", size = 1) + geom_smooth(method = "lm", col='grey') + 
   geom_text(aes(label=sales_region),hjust=0.5, vjust=-0.3) +
   xlim(24500, 33000) +
-  labs(title = 'Prices Higher in Regions with Higher Per Capita Income',
+  labs(title = 'Prices Higher in Regions in the U.S. with Higher Per Capita Income',
          x = 'Per Capita Income ($)',
          y = 'Per-Unit Price ($)')
 ```
@@ -223,7 +223,7 @@ The parameter $p$ is the number of time lags for the autoregressive (AR) model, 
 \newpage
 
 # Results
-```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Per-Unit Conventional Avocado Prices from 2017-2018"}
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
 man.fit.week <- Arima(avg_price_in_weeks[1:117], xreg=(df.total.conventional[,"Total.Volume"])[1:117], order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 52))
 man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Total.Volume"])[118:169],  n.ahead=52)
 
@@ -235,11 +235,37 @@ abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3
 
 par(mai=c(0.8,0.5,0.8,0.2))
 fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Total.Volume"])[118:169], h=52)
-{plot(fmanweek1, main = "Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
+{plot(fmanweek1, main = "3 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
 lines(ts(avg_price_in_weeks))}
 ```
 
 The predicted per-unit prices for weeks 0-10 and weeks 35-48 are relatively close to the observed prices (differ by less than $0.1). The predicted prices for weeks 25-35 exhibit a similar pattern to the actual prices for weeks 20-30, i.e. the predictions seem to lag by roughly 5 weeks.
+
+```{r}
+# https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
+df.total.conventional.month = df.total.conventional %>%
+                              group_by(Year, Month) %>%
+                              summarise_at(vars(Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+
+avg_price_in_months <- ts(df.total.conventional.month$Average.Price, frequency = 12)
+```
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(avg_price_in_months[1:27], xreg=(df.total.conventional.month[["Total.Volume"]])[1:27], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 12))
+man.pre.month <- predict(man.fit.month, newxreg=(df.total.conventional.month[["Total.Volume"]])[28:39], n.ahead=12)
+
+par(cex=0.7, mfrow=c(1,2)) 
+par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(avg_price_in_months[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+abline(v=c(3, 8), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+
+par(mai=c(0.8,0.5,0.8,0.2))
+fmanmonth1 <- forecast(man.fit.month, xreg=(df.total.conventional.month[["Total.Volume"]])[28:39], h=12)
+{plot(fmanmonth1, main = "3 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)')
+lines(ts(avg_price_in_months))}
+```
+
 
 
 \newpage
@@ -251,8 +277,12 @@ There are 54 unique regions in the dataset. One of these regions, denoted by `To
 
 
 ### Seasonal ARIMA Residuals
-```{r}
+```{r fig.cap="ARIMA Residuals based on Weekly Data"}
 checkresiduals(man.fit.week)
+```
+
+```{r fig.cap="ARIMA Residuals based on Monthly Data"}
+checkresiduals(man.fit.month)
 ```
 
 \newpage
