@@ -187,4 +187,36 @@ In general, it seems that the regions with higher per capita income also have hi
 
 \newpage
 
+
+
+### Model Specification
+```{r}
+acf(df.total.conventional$Average.Price, lag.max = 52,main = "")
+```
+```{r}
+avg_price_in_weeks.diff <- diff(df.total.conventional$Average.Price, difference = 1)
+acf(avg_price_in_weeks.diff, lag.max = 52,main = "")
+```
+
+```{r}
+pacf(df.total.conventional$Average.Price, lag.max = 52,main = "")
+```
+
+```{r}
+pacf(avg_price_in_weeks.diff, lag.max=52,main = "")
+```
+```{r}
+man.fit.week <- arima(avg_price_in_weeks[1:140], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, n.ahead=29)
+matplot(1:29, cbind(avg_price_in_weeks[141:169], man.pre.week$pred), type = "l", xlab = "Weeks", ylab = "Average Price across the US ($)", main = "Manual ARIMA")
+```
+
+```{r}
+library(forecast)
+fmanweek1 <- forecast(man.fit.week, h=29)
+{plot(fmanweek1, main = expression("ARIMA(6,0,1)(1,1,1)"[52]))
+lines(ts(avg_price_in_weeks))}
+```
+
+
 ## Bibliography
