@@ -63,6 +63,8 @@ df = df %>%
   )
 ```
 
+
+
 ```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S.", eval = F}
 ggplot(data = df[df$Region == 'TotalUS', ], aes(x = Date, y = Average.Price)) +
   geom_line(aes(color=Type)) +
@@ -103,6 +105,11 @@ avg_price_in_weeks %>% decompose(type="multiplicative") %>%
 ```
 
 The per-unit price of the conventional avocados increases yearly and exhibit seasonal trends. Prices peak in the third quarter and drop to the lowest in the first quarter. Organic avocados show very similar results.
+
+```{r}
+df.total.conventional
+```
+
 
 ```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
 ggplot(data = df.total.conventional, aes(x = Total.Volume, y = Average.Price)) +
@@ -235,7 +242,7 @@ abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3
 
 par(mai=c(0.8,0.5,0.8,0.2))
 fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Total.Volume"])[118:169], h=52)
-{plot(fmanweek1, main = "3 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
+{plot(fmanweek1, main = "1 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
 lines(ts(avg_price_in_weeks))}
 ```
 
@@ -262,7 +269,7 @@ abline(v=c(3, 8), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
 
 par(mai=c(0.8,0.5,0.8,0.2))
 fmanmonth1 <- forecast(man.fit.month, xreg=(df.total.conventional.month[["Total.Volume"]])[28:39], h=12)
-{plot(fmanmonth1, main = "3 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)')
+{plot(fmanmonth1, main = "1 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)')
 lines(ts(avg_price_in_months))}
 ```
 
