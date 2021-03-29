@@ -25,19 +25,22 @@ library(forecast)
 # Introduction
 In 2017, an Australian property developer claimed that millennials were spending too much money on avocado toast instead of saving for their first home [@Millennials]. While the millennial avocado toast stereotype is by no means convincing, avocados are indeed a favored fruit in the U.S. According to a market report [@Market], the U.S. is the world’s biggest importer of avocados. As more health benefits about avocados are discovered and promoted, demand surged even more and so did the price. The goal of this project is to investigate whether we can reasonably predict the price of avocados based on past prices and geographical data.
 
+## Existing Literature
 A study [@Forecasting] investigated the various factors that might influence the avocado market. The researchers predicted that the avocado prices would likely decrease in the 2009-2010 season due to an increase in supplies and a probable decrease in demand caused by the financial crisis. Since the study was conducted over ten years ago, it seems be interesting to examine if the avocado market has changed over the years and if we can still predict the avocado prices given its supposed volatility in recent years.
 
 ## Data
 The dataset used in this analysis is the publicly accessible Kaggle Avocado Prices dataset, which credited the Hass Avocado Board for the collection and release of the data. This dataset contains 13 variables encompassing the per-unit prices, total volumes, regions, and sizes of Hass avocados, a cultivar of avocados. Data from the start of 2015 to the end of the first quarter of 2018 are available. Each entry represents one observation from one region in the U.S. during one week. There are over 18,000 entries in total. Details of data encoding are provided in the appendix.
 
-To enrich this dataset, we join it with the U.S. State Demographics dataset from the `choroplethr` package [@Choroplethr]. Selected demographic data include the total population in the region, the average percentage of white and black population, the average per capita income, and the average median age.
+To enrich this dataset, we join it with selected macroeconomic data. Specifically, we included the unadjusted monthly unemployment rate and average earnings data available on the website of the U.S. Bureau of Labor Statistics. We also included the unadjusted monthly consumer price index for all items in the U.S. (assuming the index 2015 = 100) from the economic data provided by the Federal Reserve Bank.
 
-## Research Goals
+<!-- To enrich this dataset, we join it with the U.S. State Demographics dataset from the `choroplethr` package [@Choroplethr]. Selected demographic data include the total population in the region, the average percentage of white and black population, the average per capita income, and the average median age. -->
+
+## Research Goal
 #### Predicting the per-unit prices of Hass avocados
 Specifically, we want to use the data from 2015 to the first quarter of 2017 to predict the avocado prices in the following year. Doing so allows us to compare the predicted prices with the recorded prices and evaluate the accuracy of the predictions. Predicting one year of avocado prices enables us to examine any seasonal variations in pricing.
 
-#### Investigating whether spatial relationships exist
-Does the region (where the observations were made) have any associations with the per-unit price of the avocados? If such spatial relationships are found, what might be some potential implications?
+<!-- #### Investigating whether spatial relationships exist -->
+<!-- Does the region (where the observations were made) have any associations with the per-unit price of the avocados? If such spatial relationships are found, what might be some potential implications? -->
 
 
 ## Exploratory Data Analysis
@@ -104,11 +107,7 @@ avg_price_in_weeks %>% decompose(type="multiplicative") %>%
   ggtitle("Prices of Conventional Avocados Show Seasonal Pattern")
 ```
 
-The per-unit price of the conventional avocados increases yearly and exhibit seasonal trends. Prices peak in the third quarter and drop to the lowest in the first quarter. Organic avocados show very similar results.
-
-```{r}
-df.total.conventional
-```
+In Figure 1, the per-unit price of the conventional avocados increases yearly and exhibit seasonal trends. Prices peak in the third quarter and drop to the lowest in the first quarter. Organic avocados show very similar results.
 
 
 ```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
@@ -120,7 +119,7 @@ ggplot(data = df.total.conventional, aes(x = Total.Volume, y = Average.Price)) +
        y = 'Per-Unit Price ($)')
 ```
 
-An inverse relationship seems to exist between the per-unit price and the total sales volume of the conventional avocados.
+In Figure 2, an inverse relationship seems to exist between the per-unit price and the total sales volume of the conventional avocados.
 
 ```{r}
 # https://www.maths.usyd.edu.au/u/UG/SM/STAT3022/r/current/Lecture/lecture21_2020JC.pdf
@@ -201,8 +200,7 @@ df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% grou
     summarize(Region.Average.Price = mean(Average.Price)))
 ```
 
-\newpage
-```{r fig.height = 3.7, fig.width = 7.8, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions"}
+```{r fig.height = 3.7, fig.width = 7.8, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions", include=F}
 # https://stackoverflow.com/questions/15624656/label-points-in-geom-point
 ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.Average.Price)) +
   geom_point(colour = "dark grey", size = 1) + geom_smooth(method = "lm", col='grey') + 
@@ -213,22 +211,34 @@ ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.A
          y = 'Per-Unit Price ($)')
 ```
 
-Regions with higher per capita income seem to have higher per-unit avocado prices. An exception is the Southeast region, which has the lowest per capita income but a relatively high per-unit avocado price. Further analysis is required to better explain this observation.
+<!-- Regions with higher per capita income seem to have higher per-unit avocado prices. An exception is the Southeast region, which has the lowest per capita income but a relatively high per-unit avocado price. Further analysis is required to better explain this observation. -->
 
 
 # Methodology
-To predict the per-unit avocado prices from the first quarter of 2017 to the first quarter of 2018, we use a seasonal ARIMA with the total volume of avocados as the exogenous variable.
+Since the avocado prices data in our dataset is a sequence of data collected successively in weeks, it can be interpreted as a time series. Thus, we conduct a time series forecasting to predict the per-unit avocado prices from the first quarter of 2017 to the first quarter of 2018.
 
-## Model Specification
+One common type of time series forecasting model is the AutoRegressive Integrated Moving Average (ARIMA) model. It rests on the idea that the previous values in the time series can be used to predict future values [@TimeSeries].
+
+Referencing Figure 1, we noticed a seasonal pattern in our time series. In order to take this seasonal pattern into consideration when we predict the avocado prices, we choose to use a seasonal ARIMA (SARIMA), which includes seasonal terms (specified below) in addition to the ARIMA model. Since we also observed an inverse relationship between per-unit prices and total volumes, we include the total volume of avocados as an exogenous variable in our SARIMA model.
+
+## Weekly Model Specification
 Seasonal ARIMA $(p, d, q) \times (P, D, Q)_{s} = (1, 0, 0) \times (0, 1, 1)_{52}$ [@ARIMA_Formula]:
 $$(1-\phi_1L)(1-L^{52})y_t=\delta + (1+\Theta_1L)w_t$$
-$$y_t - y_{t-52} = \delta + w_t + \Theta_1 w_{t-52}$$
-$$y_t = \delta + y_{t-52} + w_t + \Theta_1 w_{t-52}$$
+<!-- $$y_t - y_{t-52} = \delta + w_t + \Theta_1 w_{t-52}$$ -->
+<!-- $$y_t = \delta + y_{t-52} + w_t + \Theta_1 w_{t-52}$$ -->
 
 The parameter $p$ is the number of time lags for the autoregressive (AR) model, $d$ is the degree of differencing, and $q$ is the order of the moving-average (MA) model. The uppercase $P, D, Q$ denote the autoregressive, differencing, and moving average terms for the seasonal part of the ARIMA model [@ARIMA_Notation]. The values of the parameters are determined using principles from the Box–Jenkins method [@ARIMA_Box_Jenkins].
 
-\newpage
 
+## Monthly Model Specification
+Seasonal ARIMA $(p, d, q) \times (P, D, Q)_{s} = (2, 0, 0) \times (1, 1, 1)_{12}$:
+$$(1-\Phi_1L^{12})(1-\phi_1L-\phi_2L^2)(1-L^{12})y_t=\delta + (1+\Theta_1L)w_t$$
+<!-- $$y_t - y_{t-12} = \delta + w_t + \Theta_1 w_{t-12}$$ -->
+<!-- $$y_t = \delta + \sum_{i=1}^2 \phi_iy_{t-1} + y_{t-12} + w_t + \Theta_1 w_{t-12}$$ -->
+
+We also explore a similar model with monthly avocado prices (by taking the average over the weekly prices in a given month) and exogenous variables including the monthly total volume of avocados, unemployment rate, average earnings, and consumer price index. 
+
+\newpage
 # Results
 ```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
 man.fit.week <- Arima(avg_price_in_weeks[1:117], xreg=(df.total.conventional[,"Total.Volume"])[1:117], order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 52))
@@ -236,17 +246,17 @@ man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Total.Vol
 
 par(cex=0.7, mfrow=c(1,2)) 
 par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
-matplot(1:52, cbind(avg_price_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks (03/2017-03/2018)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+matplot(1:52, cbind(avg_price_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
 abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
 # http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
 
 par(mai=c(0.8,0.5,0.8,0.2))
 fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Total.Volume"])[118:169], h=52)
-{plot(fmanweek1, main = "1 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)')
+{plot(fmanweek1, main = "1 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)\n(Total Time Span)')
 lines(ts(avg_price_in_weeks))}
 ```
 
-The predicted per-unit prices for weeks 0-10 and weeks 35-48 are relatively close to the observed prices (differ by less than $0.1). The predicted prices for weeks 25-35 exhibit a similar pattern to the actual prices for weeks 20-30, i.e. the predictions seem to lag by roughly 5 weeks.
+The predicted per-unit prices (in dotted red line) for weeks 0-10 and weeks 35-48 are relatively close to the observed prices (differ by less than $0.1). The predicted prices for weeks 25-35 exhibit a similar pattern to the actual prices for weeks 20-30, i.e. the predictions seem to lag by roughly 5 weeks.
 
 ```{r}
 # https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
@@ -257,37 +267,84 @@ df.total.conventional.month = df.total.conventional %>%
 avg_price_in_months <- ts(df.total.conventional.month$Average.Price, frequency = 12)
 ```
 
-```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018"}
-man.fit.month <- Arima(avg_price_in_months[1:27], xreg=(df.total.conventional.month[["Total.Volume"]])[1:27], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 12))
-man.pre.month <- predict(man.fit.month, newxreg=(df.total.conventional.month[["Total.Volume"]])[28:39], n.ahead=12)
+```{r}
+df.earnings.month = read.csv('average_weekly_earnings.csv')[ ,c('Year', 'Label', 'Value')]
+df.earnings.month$Month = substr(df.earnings.month$Label, 6, 8)
+df.earnings.month$Month = match(df.earnings.month$Month, month.abb)
+df.earnings.month = df.earnings.month[ ,c('Year', 'Month', 'Value')]
+```
 
-par(cex=0.7, mfrow=c(1,2)) 
+```{r}
+df.unemployment.month = read.csv('unemployment_rate.csv')[ ,c('Year', 'Label', 'Value')]
+df.unemployment.month$Month = substr(df.unemployment.month$Label, 6, 8)
+df.unemployment.month$Month = match(df.unemployment.month$Month, month.abb)
+df.unemployment.month = df.unemployment.month[ ,c('Year', 'Month', 'Value')]
+```
+
+```{r}
+df.cpi.month = read.csv('consumer_price_index_all_items.csv')
+df.cpi.month$Date = as.Date(df.cpi.month$DATE, "%m/%d/%y")
+df.cpi.month$Year = year(df.cpi.month$Date)
+df.cpi.month$Month = month(df.cpi.month$Date)
+df.cpi.month = df.cpi.month[ ,c('Year', 'Month', 'USACPIALLMINMEI', 'Date')]
+```
+
+```{r}
+covariates.mat = cbind(df.total.conventional.month[["Total.Volume"]],
+             df.earnings.month[['Value']],
+             df.unemployment.month[['Value']],
+             df.cpi.month[['USACPIALLMINMEI']])
+```
+
+```{r fig.height = 3, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(avg_price_in_months[1:27], xreg=covariates.mat[1:27], order = c(2,0,0), seasonal = list(order = c(1,1,1), period = 12))
+man.pre.month <- predict(man.fit.month, newxreg=covariates.mat[28:39], n.ahead=12)
+
+par(cex=0.7, mfrow=c(1,2))
 par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
-matplot(1:12, cbind(avg_price_in_months[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
-abline(v=c(3, 8), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
+matplot(1:12, cbind(avg_price_in_months[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+abline(v=c(3, 11), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
 # http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
 
 par(mai=c(0.8,0.5,0.8,0.2))
-fmanmonth1 <- forecast(man.fit.month, xreg=(df.total.conventional.month[["Total.Volume"]])[28:39], h=12)
-{plot(fmanmonth1, main = "1 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)')
+fmanmonth1 <- forecast(man.fit.month, xreg=covariates.mat[28:39], h=12)
+{plot(fmanmonth1, main = "1 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
 lines(ts(avg_price_in_months))}
 ```
 
+In months 3-11, the predicted per-unit prices differ no more than $0.1 from the observed prices. In contrast, the predicted prices for months 1-3 and 11-12 show greater differences, though never exceeding \$0.2. The lag observed in the weekly model seems to disappear.
+
+
+```{r fig.height = 3, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018", include=F}
+# temp = df.total.conventional.month[["Total.Volume"]]
+# man.fit.month <- Arima(avg_price_in_months[1:27], xreg=temp[1:27], order = c(3,0,0), seasonal = list(order = c(0,1,1), period = 12))
+# man.pre.month <- predict(man.fit.month, newxreg=temp[28:39], n.ahead=12)
+# 
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+# matplot(1:12, cbind(avg_price_in_months[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+# abline(v=c(3, 8), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
+# # http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+# 
+# par(mai=c(0.8,0.5,0.8,0.2))
+# fmanmonth1 <- forecast(man.fit.month, xreg=temp[28:39], h=12)
+# {plot(fmanmonth1, main = "1 Year Prediction with Uncertainty", xlab = 'Months (01/2015-03/2018)')
+# lines(ts(avg_price_in_months))}
+```
 
 
 \newpage
 
-## Appendix
+# Appendix
+<!-- ## Data Encoding Details -->
+<!-- There are 54 unique regions in the dataset. One of these regions, denoted by `TotalUS`, encompasses the avocado volumes in the country as a whole. Another 8 regions corresponds to large geographical divisions of the U.S. such as the `Northeast` region, `Southwest` region, etc. The remaining regions represent smaller geographical areas in a less consistent way, sometimes referring to a single city in a state (e.g. `Chicago`) while other times denoting cities across states (e.g. `BaltimoreWashington`). Some regions can also be ambiguous - cities such as `Albany` and `Jacksonville` can be found in more than one state. Thus, to manage the location data consistently and unambiguously, we choose to focus on the 8 geographical regions. -->
 
-### Data Encoding Details
-There are 54 unique regions in the dataset. One of these regions, denoted by `TotalUS`, encompasses the avocado volumes in the country as a whole. Another 8 regions corresponds to large geographical divisions of the U.S. such as the `Northeast` region, `Southwest` region, etc. The remaining regions represent smaller geographical areas in a less consistent way, sometimes referring to a single city in a state (e.g. `Chicago`) while other times denoting cities across states (e.g. `BaltimoreWashington`). Some regions can also be ambiguous - cities such as `Albany` and `Jacksonville` can be found in more than one state. Thus, to manage the location data consistently and unambiguously, we choose to focus on the 8 geographical regions.
 
-
-### Seasonal ARIMA Residuals
+## Seasonal ARIMA Residuals
 ```{r fig.cap="ARIMA Residuals based on Weekly Data"}
 checkresiduals(man.fit.week)
 ```
-
+\newpage
 ```{r fig.cap="ARIMA Residuals based on Monthly Data"}
 checkresiduals(man.fit.month)
 ```
