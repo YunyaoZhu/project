@@ -19,6 +19,8 @@ library(lubridate) # extract month
 library(choroplethr) # Census data
 library(choroplethrMaps) # Census maps
 library(forecast)
+library(plyr) # revalue
+library(caret) # dummyVars
 ```
 
 
@@ -64,8 +66,25 @@ df = df %>%
     Year = 'year',
     Region = 'region'
   )
+
+overall = c('TotalUS')
+regions = c('California','West','Plains','SouthCentral','GreatLakes','Midsouth','Southeast','Northeast')
 ```
 
+
+
+
+```{r}
+m0 = lm(Average.Price ~ Year + Region + Type, data = df[df$Region %in% regions,] )
+summary(m0)
+plot(m0)
+```
+
+```{r}
+m1 = lm(Average.Price ~ Year*Region*Type, data = df[df$Region %in% regions,] )
+summary(m1)
+plot(m1)
+```
 
 
 ```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S.", eval = F}
@@ -126,9 +145,6 @@ In Figure 2, an inverse relationship seems to exist between the per-unit price a
 
 data(df_state_demographics)
 
-overall = c('TotalUS')
-regions = c('California','West','Plains','SouthCentral','GreatLakes','Midsouth','Southeast','Northeast')
-
 states_California = c('california')
 states_West = c('washington','oregon','nevada','idaho','montana','wyoming','utah','colorado','new mexico','arizona')
 states_Plains = c('north dakota', 'south dakota', 'nebraska', 'kansas', 'minnesota', 'iowa', 'missouri')
@@ -186,6 +202,7 @@ df_new = df_new %>%
    mutate(weighted_median_age=weighted.mean(x=median_age, w=total_population))
 ```
 
+
 ```{r}
 df_sales_regions = df_new %>% group_by(sales_region) %>%
     summarize(sales_region_total_population = mean(sales_region_total_population),
@@ -195,9 +212,36 @@ df_sales_regions = df_new %>% group_by(sales_region) %>%
               weighted_median_age = mean(weighted_median_age))
 ```
 
+
+
 ```{r}
-df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% group_by(Region) %>%
-    summarize(Region.Average.Price = mean(Average.Price)))
+# df_sales_regions = cbind(df_sales_regions, df[df$Region %in% regions, ] %>% group_by(Region) %>%
+#     summarize(Region.Average.Price = mean(Average.Price)))
+```
+
+
+```{r}
+# Select variables of interest
+df_grouped_regions = df[df$Region %in% regions, ] %>% select(c(Date, Average.Price, Total.Volume, Type, Year, Region, Month, Year.Month))
+
+# Rename selected levels
+# http://www.cookbook-r.com/Manipulating_data/Renaming_levels_of_a_factor/
+df_grouped_regions$Region = revalue(df_grouped_regions$Region, c("GreatLakes"="Great Lakes", "SouthCentral"="South Central"))
+```
+
+
+
+```{r}
+df_regions_demographics = merge(x = df_grouped_regions, y = df_sales_regions, by.x = "Region", by.y = "sales_region")
+```
+
+
+
+
+```{r}
+m2 = lm(Average.Price ~ Year + Region + Type + sales_region_total_population + weighted_percent_white + weighted_per_capita_income + weighted_median_age, data = df_regions_demographics )
+summary(m2)
+plot(m2)
 ```
 
 ```{r fig.height = 3.7, fig.width = 7.8, fig.cap="Scatter Plot of Per-unit Prices\nof Avocados v.s. Per Capita Income in Different Regions", include=F}
@@ -212,6 +256,9 @@ ggplot(data = df_sales_regions, aes(x = weighted_per_capita_income, y = Region.A
 ```
 
 <!-- Regions with higher per capita income seem to have higher per-unit avocado prices. An exception is the Southeast region, which has the lowest per capita income but a relatively high per-unit avocado price. Further analysis is required to better explain this observation. -->
+
+
+
 
 
 # Methodology
@@ -240,6 +287,8 @@ We also explore a similar model with monthly avocado prices (by taking the avera
 
 \newpage
 # Results
+
+## Weekly with Volume Sold as a Predictor - Predicting Price
 ```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
 man.fit.week <- Arima(avg_price_in_weeks[1:117], xreg=(df.total.conventional[,"Total.Volume"])[1:117], order = c(1,0,0), seasonal = list(order = c(0,1,1), period = 52))
 man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Total.Volume"])[118:169],  n.ahead=52)
@@ -258,6 +307,45 @@ lines(ts(avg_price_in_weeks))}
 
 The predicted per-unit prices (in dotted red line) for weeks 0-10 and weeks 35-48 are relatively close to the observed prices (differ by less than $0.1). The predicted prices for weeks 25-35 exhibit a similar pattern to the actual prices for weeks 20-30, i.e. the predictions seem to lag by roughly 5 weeks.
 
+
+
+
+
+## Weekly with Price as a Predictor - Predicting Volume Sold
+```{r fig.height = 3.2, fig.width = 6, fig.cap="Time Series Plot of Per-unit Prices of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+volume_in_weeks <- ts(df.total.conventional$Total.Volume, start = c(2015, 1), frequency = 52)
+
+volume_in_weeks %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Total Volume of Conventional Avocados Sold Show Seasonal Pattern")
+```
+
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.week <- Arima(volume_in_weeks[1:117], xreg=(df.total.conventional[,"Average.Price"])[1:117], order = c(2,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, newxreg=(df.total.conventional[,"Average.Price"])[118:169],  n.ahead=52)
+
+par(cex=0.7, mfrow=c(1,2)) 
+par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:52, cbind(volume_in_weeks[118:169], man.pre.week$pred), type = "l", xlab = "Weeks (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Per-Unit Price ($)", main = "1 Year Per-Unit Price Prediction")
+abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+
+par(mai=c(0.8,0.5,0.8,0.2))
+fmanweek1 <- forecast(man.fit.week, xreg=(df.total.conventional[,"Average.Price"])[118:169], h=52)
+{plot(fmanweek1, main = "1 Year Prediction with Uncertainty", xlab = 'Weeks (01/2015-03/2018)\n(Total Time Span)')
+lines(ts(volume_in_weeks))}
+```
+
+
+
+## Monthly with Volume Sold, Total Earnings, Unemployment, and CPI as predictors
 ```{r}
 # https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
 df.total.conventional.month = df.total.conventional %>%
@@ -314,6 +402,23 @@ lines(ts(avg_price_in_months))}
 
 In months 3-11, the predicted per-unit prices differ no more than $0.1 from the observed prices. In contrast, the predicted prices for months 1-3 and 11-12 show greater differences, though never exceeding \$0.2. The lag observed in the weekly model seems to disappear.
 
+## Weekly in Grouped Regions
+
+
+
+```{r}
+# dummy = dummyVars(" ~ .", data=df_grouped_regions)
+# df_grouped_regions_one_hot = data.frame(predict(dummy, newdata = df_grouped_regions))
+# 
+# weekly.regions.covariates.mat = cbind(df_grouped_regions_one_hot[["Typeorganic"]],
+#              df_grouped_regions_one_hot[['RegionCalifornia']],
+#              df_grouped_regions_one_hot[['RegionGreat.Lakes']],
+#              df_grouped_regions_one_hot[['RegionNortheast']],
+#              df_grouped_regions_one_hot[['RegionPlains']],
+#              df_grouped_regions_one_hot[['RegionSouth.Central']],
+#              df_grouped_regions_one_hot[['RegionSoutheast']],
+#              df_grouped_regions_one_hot[['RegionWest']])
+```
 
 ```{r fig.height = 3, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018", include=F}
 # temp = df.total.conventional.month[["Total.Volume"]]
