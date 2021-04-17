@@ -1,0 +1,619 @@
+---
+title: "Report_Old_Data"
+author: "Yunyao Zhu"
+date: "4/15/2021"
+output: pdf_old_document
+number_sections: true
+fig_caption: yes
+header-includes: 
+  - \usepackage{breqn}
+  - \usepackage{amsmath}
+bibliography: sources.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(lubridate) # extract month
+library(forecast)
+```
+
+## Exploratory Data Analysis
+
+```{r}
+df_old = read.csv('avocado.csv')
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+
+df_old = df_old %>%
+  rename(
+    Average.Price = 'AveragePrice',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'region'
+  )
+```
+
+```{r}
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+```
+
+```{r}
+df_old.total.weekly.conventional = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'conventional'), ]
+df_old.total.weekly.organic = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'organic'), ]
+```
+
+```{r}
+df_old.total.monthly.conventional = df_old.total.weekly.conventional %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+
+
+df_old.total.monthly.organic = df_old.total.weekly.organic %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+```
+
+```{r}
+df_old.total.weekly.conventional$Total.Volume.Million = df_old.total.weekly.conventional$Total.Volume/1000000
+df_old.total.weekly.organic$Total.Volume.Million = df_old.total.weekly.organic$Total.Volume/1000000
+df_old.total.monthly.conventional$Total.Volume.Million = df_old.total.monthly.conventional$Total.Volume/1000000
+df_old.total.monthly.organic$Total.Volume.Million = df_old.total.monthly.organic$Total.Volume/1000000
+```
+
+
+# EDA
+
+## Weekly Volume
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df_old.total.weekly.conventional, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df_old.total.weekly.conventional)
+summary(m0)
+plot(m0)
+```
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.weekly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+old_weekly_conventional_volume <- ts(df_old.total.weekly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 52)
+
+old_weekly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.week <- Arima(old_weekly_conventional_volume[1:117], xreg=(df_old.total.weekly.conventional[,"Average.Price"])[1:117], order = c(2,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, newxreg=(df_old.total.weekly.conventional[,"Average.Price"])[118:169],  n.ahead=52)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:52, cbind(old_weekly_conventional_volume[118:169], man.pre.week$pred), type = "l", xlab = "Weeks (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+par(mai=c(0.8,0.5,0.8,0.2))
+fmanweek1 <- forecast(man.fit.week, xreg=(df_old.total.weekly.conventional[,"Average.Price"])[118:169], h=52, level = c(95))
+{plot(fmanweek1, main = "One-Year Prediction with 95% CI", xlab = 'Weeks (03/2017-03/2018)\n(Total Time Span)')
+lines(ts(old_weekly_conventional_volume))}
+```
+
+## Monthly Volume
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df_old.total.monthly.conventional, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df_old.total.monthly.conventional)
+summary(m0)
+plot(m0)
+```
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+old_monthly_conventional_volume <- ts(df_old.total.monthly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 12)
+
+old_monthly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+```{r}
+library(tseries)
+
+adf.test(old_monthly_conventional_volume, alternative = "stationary")
+```
+
+
+```{r}
+adf.test(old_weekly_conventional_volume, alternative = "stationary")
+
+```
+
+```{r}
+week_price.diff <- diff(avocado_price$AveragePrice, difference = 1)
+adf.test(week_price.diff,alternative = "stationary")
+```
+
+
+```{r}
+df_old.total.monthly.conventional$Total.Volume.Million %>%
+  ggtsdisplay(xlab="Year",
+    main="Total Volume")
+```
+
+
+```{r}
+(fr_m1 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(0,0,0),
+seasonal = list(order=c(0,0,0), period=12)))
+# man.fit.month <- Arima(old_monthly_conventional_volume[1:27], xreg=df_old.total.monthly.conventional[["Average.Price"]][1:27], order = c(2,0,0), seasonal = list(order = c(1,1,1), period = 12))
+
+```
+
+
+```{r}
+(fr_m2 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(0,0,0),
+seasonal = list(order=c(0,1,0), period=12)))
+```
+
+```{r}
+(fr_m3.1 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(0,0,0),
+seasonal = list(order=c(0,1,1), period=12)))
+```
+
+```{r}
+(fr_m3.2 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(0,0,0),
+seasonal = list(order=c(0,1,2), period=12)))
+```
+
+
+```{r}
+(fr_m3.3 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(0,0,0),
+seasonal = list(order=c(0,1,3), period=12)))
+```
+
+```{r}
+(fr_m4.1 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(1,0,0),
+seasonal = list(order=c(0,1,2), period=12)))
+```
+
+```{r}
+(fr_m4.2 = Arima(old_monthly_conventional_volume, xreg=df_old.total.monthly.conventional[["Average.Price"]], order = c(2,0,0),
+seasonal = list(order=c(0,1,2), period=12)))
+```
+
+
+
+
+
+```{r}
+df_old.total.monthly.conventional$Total.Volume.Million %>% diff(lag=1) %>%
+  ggtsdisplay(xlab="Year",
+    main="Seasonally differenced Total Volume")
+```
+
+
+```{r}
+## ACF - Seasonal AR (Q)
+acf(df_old.total.monthly.conventional$Total.Volume.Million, lag.max = 12,main = "")
+```
+
+[Rephrase]: From the correlogram we can see that there is significant correlation (blue line represents 95% confidence) from lag 1, therefore an AR order (Q) of 1 is trialled.
+
+
+```{r}
+# Differenced ACF - Non-Seasonal AR (q)
+old_monthly_conventional_volume.diff <- diff(df_old.total.monthly.conventional$Total.Volume.Million, difference = 1)
+acf(old_monthly_conventional_volume.diff, lag.max = 12,main = "")
+```
+[Rephrase:] As only lag 0 is significant this could suggest that AR of the non-seasonal component (q) is 0.
+
+```{r}
+## PACF - Seasonal MA (P)
+pacf(df_old.total.monthly.conventional$Total.Volume.Million, lag.max = 12,main = "")
+```
+
+Again, here we see a correlation at only lag 0/2, therefore a MA (P) of 0/2 is used in the seasonal component.???
+
+```{r}
+pacf(old_monthly_conventional_volume.diff, lag.max=12,main = "")
+```
+
+Finally, using the difference PACF, we can work out the AR (p) of the non-seasonal order. It shows that only the first 3 lags are significantly correlated, therefore 3 is used.
+
+
+Seasonal ARIMA $(p, d, q) \times (P, D, Q)_{s}$
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(old_monthly_conventional_volume[1:27], xreg=df_old.total.monthly.conventional[["Average.Price"]][1:27], order = c(2,0,0), seasonal = list(order = c(0,1,2), period = 12))
+man.pre.month <- predict(man.fit.month, newxreg=df_old.total.monthly.conventional[["Average.Price"]][28:39],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_volume[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+# par(mai=c(0.8,0.5,0.8,0.2))
+fmanweek1 <- forecast(man.fit.month, xreg=df_old.total.monthly.conventional[["Average.Price"]][28:39], h=12, level = c(95))
+{plot(fmanweek1, main = "Prediction with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)', ylab = "Predicted Volume (in Millions)")
+lines(ts(old_monthly_conventional_volume))}
+```
+
+
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(old_monthly_conventional_volume[1:27], order = c(2,0,0), seasonal = list(order = c(0,1,2), period = 12))
+man.pre.month <- predict(man.fit.month, n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_volume[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+# par(mai=c(0.8,0.5,0.8,0.2))
+fmanweek1 <- forecast(man.fit.month, h=12, level = c(95))
+{plot(fmanweek1, main = "One-Year Prediction with 95% CI", xlab = 'Months (03/2017-03/2018)\n(Total Time Span)')
+lines(ts(old_monthly_conventional_volume))}
+```
+
+
+
+
+
+
+
+
+## Weekly Price
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Per-Unit Price of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+old_weekly_conventional_price <- ts(df_old.total.weekly.conventional$Average.Price, start = c(2015, 1), frequency = 52)
+
+old_weekly_conventional_price %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Per-Unit Price of Conventional Avocados in the U.S. Show Seasonal Pattern")
+```
+
+
+## Monthly Price
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Per-Unit Price of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+old_monthly_conventional_price <- ts(df_old.total.monthly.conventional$Average.Price, start = c(2015, 1), frequency = 12)
+
+old_monthly_conventional_price %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Per-Unit Prices of Conventional Avocados in the U.S. Show Seasonal Pattern")
+```
+
+```{r}
+df.earnings.month = read.csv('average_weekly_earnings.csv')[ ,c('Year', 'Label', 'Value')]
+df.earnings.month$Month = substr(df.earnings.month$Label, 6, 8)
+df.earnings.month$Month = match(df.earnings.month$Month, month.abb)
+df.earnings.month = df.earnings.month[ ,c('Year', 'Month', 'Value')]
+
+df.earnings.month$Year.Month = paste(as.character(df.earnings.month$Year), sprintf("%02d",df.earnings.month$Month), sep="-")
+
+df.earnings.month = df.earnings.month %>% rename(Earnings = 'Value')
+```
+
+
+```{r}
+df.unemployment.month = read.csv('unemployment_rate.csv')[ ,c('Year', 'Label', 'Value')]
+df.unemployment.month$Month = substr(df.unemployment.month$Label, 6, 8)
+df.unemployment.month$Month = match(df.unemployment.month$Month, month.abb)
+df.unemployment.month = df.unemployment.month[ ,c('Year', 'Month', 'Value')]
+
+df.unemployment.month$Year.Month = paste(as.character(df.unemployment.month$Year), sprintf("%02d",df.unemployment.month$Month), sep="-")
+
+df.unemployment.month = df.unemployment.month %>% rename(Unemployment = 'Value')
+```
+
+```{r}
+df.cpi.month = read.csv('consumer_price_index_all_items.csv')
+df.cpi.month$Date = as.Date(df.cpi.month$DATE, "%m/%d/%y")
+df.cpi.month$Year = year(df.cpi.month$Date)
+df.cpi.month$Month = month(df.cpi.month$Date)
+df.cpi.month = df.cpi.month[ ,c('Year', 'Month', 'USACPIALLMINMEI', 'Date')]
+
+df.cpi.month$Year.Month = paste(as.character(df.cpi.month$Year), sprintf("%02d",df.cpi.month$Month), sep="-")
+
+df.cpi.month = df.cpi.month %>% rename(CPI = 'USACPIALLMINMEI')
+```
+
+```{r}
+df_old.total.monthly.conventional.merged = cbind(df_old.total.monthly.conventional, df.earnings.month['Earnings'], df.unemployment.month['Unemployment'], df.cpi.month['CPI'])
+```
+
+
+```{r fig.height = 3, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = Earnings, y = Average.Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Correlation between Per-Unit Prices and Earnings',
+       x = 'Average Weekly Earnings ($)',
+       y = 'Per-Unit Prices ($)')
+```
+
+
+```{r fig.height = 3, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = Unemployment, y = Average.Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Per-Unit Prices and Unemployment Rates',
+       x = 'Unemployment Rates (%)',
+       y = 'Per-Unit Prices ($)')
+```
+
+
+```{r fig.height = 3, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = CPI, y = Average.Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Correlation Between CPI and Unemployment Rates',
+       x = 'Consumer Price Indices (CPI)',
+       y = 'Per-Unit Prices ($)')
+```
+
+
+```{r}
+m1 = lm(Average.Price ~ Earnings + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m1)
+plot(m1)
+```
+
+
+
+```{r}
+covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Earnings']],
+             df_old.total.monthly.conventional.merged[['Unemployment']],
+             df_old.total.monthly.conventional.merged[['CPI']])
+```
+
+
+
+```{r}
+adf.test(old_monthly_conventional_price, alternative = "stationary")
+```
+
+```{r}
+old_monthly_conventional_price.diff <- diff(df_old.total.monthly.conventional$Average.Price, difference = 2)
+adf.test(old_monthly_conventional_price.diff,alternative = "stationary")
+```
+
+
+```{r}
+df_old.total.monthly.conventional$Average.Price %>%
+  ggtsdisplay(xlab="Year",
+    main="Total Volume")
+```
+```{r}
+(fr_m0.0 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,0,0),
+seasonal = list(order=c(0,0,0), period=12)))
+# Arima(old_monthly_conventional_price[1:27], xreg=covariates.mat[1:27]
+# man.fit.month <- Arima(old_monthly_conventional_volume[1:27], xreg=df_old.total.monthly.conventional[["Average.Price"]][1:27], order = c(2,0,0), seasonal = list(order = c(1,1,1), period = 12))
+
+```
+
+
+```{r}
+(fr_m0.1 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,0,0), period=12)))
+```
+
+
+```{r}
+(fr_m0.2 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,2,0),
+seasonal = list(order=c(0,0,0), period=12)))
+```
+
+
+```{r}
+(fr_m1 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,0,0), period=12)))
+# man.fit.month <- Arima(old_monthly_conventional_volume[1:27], xreg=df_old.total.monthly.conventional[["Average.Price"]][1:27], order = c(2,0,0), seasonal = list(order = c(1,1,1), period = 12))
+
+```
+
+
+```{r}
+(fr_m2 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,1,0), period=12)))
+```
+
+
+```{r}
+(fr_m3.1 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,0,1), period=12)))
+```
+
+```{r}
+(fr_m3.2 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,0,2), period=12)))
+```
+
+
+```{r}
+(fr_m3.3 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(0,1,0),
+seasonal = list(order=c(0,0,3), period=12)))
+```
+
+```{r}
+(fr_m4.1 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(1,0,0),
+seasonal = list(order=c(0,1,2), period=12)))
+```
+
+```{r}
+(fr_m4.2 = Arima(old_monthly_conventional_price, xreg=covariates.mat, order = c(2,0,0),
+seasonal = list(order=c(0,1,2), period=12)))
+```
+
+
+
+
+
+```{r}
+df_old.total.monthly.conventional$Average.Price %>% diff(lag=1) %>%
+  ggtsdisplay(xlab="Year",
+    main="Seasonally differenced Average Price")
+```
+
+
+```{r}
+## ACF - Seasonal AR (Q)
+acf(df_old.total.monthly.conventional$Average.Price, lag.max = 12,main = "")
+```
+
+[Rephrase]: From the correlogram we can see that there is significant correlation (blue line represents 95% confidence) from lag 1, therefore an AR order (Q) of 1 is trialled.
+
+
+```{r}
+# Differenced ACF - Non-Seasonal AR (q)
+old_monthly_conventional_price.diff <- diff(df_old.total.monthly.conventional$Average.Price, difference = 1)
+acf(old_monthly_conventional_price.diff, lag.max = 12,main = "")
+```
+[Rephrase:] As only lag 0 is significant this could suggest that AR of the non-seasonal component (q) is 0.
+
+```{r}
+## PACF - Seasonal MA (P)
+pacf(df_old.total.monthly.conventional$Average.Price, lag.max = 12,main = "")
+```
+
+Again, here we see a correlation at only lag 0, therefore a MA (P) of 0 is used in the seasonal component.
+
+```{r}
+pacf(old_monthly_conventional_price.diff, lag.max=12,main = "")
+```
+
+Finally, using the difference PACF, we can work out the AR (p) of the non-seasonal order. It shows that only the first 3 lags are significantly correlated, therefore 3 is used.
+
+
+
+
+
+
+
+
+
+
+
+```{r fig.height = 3, fig.width = 7.2, fig.cap="Predicting the Monthly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month.price <- Arima(old_monthly_conventional_price[1:27], xreg=covariates.mat[1:27], order = c(1,1,0), seasonal = list(order = c(0,1,2), period = 12))
+man.pre.month.price <- predict(man.fit.month.price, newxreg=covariates.mat[28:39], n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2))
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], man.pre.month.price$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Per-Unit Price ($)", main = "One-Year Per-Unit Price Prediction")
+# abline(v=c(3, 11), col=c("grey", "grey"), lty=c(3, 3), lwd=c(1, 1))
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+```
+
+```{r}
+# par(mai=c(0.8,0.5,0.8,0.2))
+fmanmonth1 <- forecast(man.fit.month.price, xreg=covariates.mat[28:39], h=12, level = c(95))
+{plot(fmanmonth1, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
+lines(ts(old_monthly_conventional_price))}
+```
+
+
+

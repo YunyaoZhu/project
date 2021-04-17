@@ -1,0 +1,324 @@
+---
+title: "Report"
+author: "Yunyao Zhu"
+date: "4/15/2021"
+output: pdf_document
+number_sections: true
+fig_caption: yes
+header-includes: 
+  - \usepackage{breqn}
+  - \usepackage{amsmath}
+bibliography: sources.bib
+nocite: '@*'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(lubridate) # extract month
+library(forecast)
+```
+
+## Exploratory Data Analysis
+
+```{r}
+df = read.csv('avocado-updated-2020.csv')
+```
+
+```{r}
+df = df %>%
+  rename(
+    Date = 'date',
+    Average.Price = 'average_price',
+    Total.Volume = 'total_volume',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'geography',
+    Total.Bags = 'total_bags',
+    Small.Bags = 'small_bags',
+    Large.Bags = 'large_bags',
+    XLarge.Bags = 'xlarge_bags'
+  )
+```
+
+```{r}
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+df$Date = as.Date(df$Date, "%Y-%m-%d")
+df$Month = month(df$Date)
+df$Year.Month <- format(as.Date(df$Date), "%Y-%m")
+df = df[order(df$Date), ]
+```
+
+```{r fig.height = 3.5, fig.width = 5.5, fig.cap="Average Prices of Hass Avocados Over Time in the U.S.", eval = F}
+ggplot(data = df[df$Region == 'Total U.S.', ], aes(x = Date, y = Average.Price)) +
+  geom_line(aes(color=Type)) +
+  labs(x='Time (Weeks)', y='Average Price ($)', title='Per-unit Prices of Hass Avocados Increase Yearly', subtitle='Organic Avocados More Expensive than Conventional Avocados')
+```
+
+
+```{r}
+df.total.weekly.conventional = df[(df$Region == 'Total U.S.') & (df$Type == 'conventional'), ]
+df.total.weekly.organic = df[(df$Region == 'Total U.S.') & (df$Type == 'organic'), ]
+```
+
+```{r}
+df.total.monthly.conventional = df.total.weekly.conventional %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+
+
+df.total.monthly.organic = df.total.weekly.organic %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+```
+
+```{r}
+df.total.weekly.conventional$Total.Volume.Million = df.total.weekly.conventional$Total.Volume/1000000
+df.total.weekly.organic$Total.Volume.Million = df.total.weekly.organic$Total.Volume/1000000
+df.total.monthly.conventional$Total.Volume.Million = df.total.monthly.conventional$Total.Volume/1000000
+df.total.monthly.organic$Total.Volume.Million = df.total.monthly.organic$Total.Volume/1000000
+```
+
+
+
+
+# EDA
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df.total.weekly.conventional, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df.total.weekly.conventional)
+summary(m0)
+plot(m0)
+```
+
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df.total.weekly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+weekly_conventional_volume <- ts(df.total.weekly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 52)
+
+weekly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.week <- Arima(weekly_conventional_volume[1:254], xreg=(df.total.weekly.conventional[,"Average.Price"])[1:254], order = c(2,0,0), seasonal = list(order = c(0,1,1), period = 52))
+man.pre.week <- predict(man.fit.week, newxreg=(df.total.weekly.conventional[,"Average.Price"])[255:306],  n.ahead=52)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:52, cbind(weekly_conventional_volume[255:306], man.pre.week$pred), type = "l", xlab = "Weeks (12/2019-12/2020)\n(Prediction Period Only)", ylab = "Predicted Sales Volume", main = "1 Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+par(mai=c(0.8,0.5,0.8,0.2))
+fmanweek1 <- forecast(man.fit.week, xreg=(df.total.weekly.conventional[,"Average.Price"])[255:306], h=52)
+{plot(fmanweek1, main = "1 Year Prediction with Uncertainty", xlab = 'Weeks (12/2019-12/2020)\n(Total Time Span)')
+lines(ts(weekly_conventional_volume))}
+```
+
+
+
+# Monthly Volume
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df.total.monthly.conventional, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df.total.monthly.conventional)
+summary(m0)
+plot(m0)
+```
+
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df.total.monthly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+monthly_conventional_volume <- ts(df.total.monthly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 12)
+
+monthly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(monthly_conventional_volume[1:59], xreg=df.total.monthly.conventional[["Average.Price"]][1:59], order = c(2,0,0), seasonal = list(order = c(0,1,1), period = 12))
+man.pre.month <- predict(man.fit.month, newxreg=df.total.monthly.conventional[["Average.Price"]][60:71],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(monthly_conventional_volume[60:71], man.pre.month$pred), type = "l", xlab = "Months (12/2019-12/2020)\n(Prediction Period Only)", ylab = "Predicted Sales Volume", main = "2020 Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+par(mai=c(0.8,0.5,0.8,0.2))
+fmanmonth1 <- forecast(man.fit.month, xreg=(df.total.monthly.conventional[["Average.Price"]])[60:71], h=12, level = c(95))
+{plot(fmanmonth1, main = "2020 Sales Prediction with 95% CI", xlab = 'Months (12/2019-12/2020)\n(Total Time Span)')
+lines(ts(monthly_conventional_volume))}
+```
+
+
+# Pre-Pandemic Analysis
+```{r}
+df.total.weekly.conventional.prepandemic = df.total.weekly.conventional[df.total.weekly.conventional$Year < 2020,]
+
+df.total.weekly.organic.prepandemic = df.total.weekly.organic[df.total.weekly.organic$Year < 2020,]
+```
+
+
+```{r}
+df.total.monthly.conventional.prepandemic = df.total.monthly.conventional[df.total.monthly.conventional$Date < as.Date('2020-01-01'),]
+
+df.total.monthly.organic.prepandemic = df.total.monthly.organic[df.total.monthly.organic$Date < as.Date('2020-01-01'),]
+```
+
+
+
+## Pre-Pandemic Monthly Volume
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df.total.monthly.conventional.prepandemic, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df.total.monthly.conventional.prepandemic)
+summary(m0)
+plot(m0)
+```
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df.total.monthly.conventional.prepandemic, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+prepandemic_monthly_conventional_volume <- ts(df.total.monthly.conventional.prepandemic$Total.Volume.Million, start = c(2015, 1), frequency = 12)
+
+prepandemic_monthly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+man.fit.month <- Arima(prepandemic_monthly_conventional_volume[1:48], xreg=df.total.monthly.conventional.prepandemic[["Average.Price"]][1:48], order = c(2,0,0), seasonal = list(order = c(1,1,1), period = 12))
+man.pre.month <- predict(man.fit.month, newxreg=df.total.monthly.conventional.prepandemic[["Average.Price"]][49:60],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(prepandemic_monthly_conventional_volume[49:60], man.pre.month$pred), type = "l", xlab = "Months (01/2019-12/2019)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "2019 Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r}
+# http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
+# par(mai=c(0.8,0.5,0.8,0.2))
+fmanmonth1 <- forecast(man.fit.month, xreg=df.total.monthly.conventional.prepandemic[["Average.Price"]][49:60], h=12, level = c(95))
+{plot(fmanmonth1, main = "2019 Sales Volume Prediction with 95% CI", xlab = 'Months (01/2019-12/2019)\n(Total Time Span)')
+lines(ts(prepandemic_monthly_conventional_volume))}
+```
+
+
