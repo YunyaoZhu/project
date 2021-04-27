@@ -1,0 +1,225 @@
+---
+title: "Report"
+author: "Yunyao Zhu"
+date: "4/26/2021"
+output: pdf_document
+number_sections: true
+fig_caption: yes
+header-includes: 
+  - \usepackage{breqn}
+  - \usepackage{amsmath}
+bibliography: sources.bib
+nocite: '@*'
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(lubridate) # extract month
+library(forecast)
+```
+
+
+```{r}
+df_old = read.csv('avocado.csv')
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+
+df_old = df_old %>%
+  rename(
+    Average.Price = 'AveragePrice',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'region'
+  )
+```
+
+```{r}
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+```
+
+```{r}
+df_old.total.weekly.conventional = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'conventional'), ]
+df_old.total.weekly.organic = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'organic'), ]
+```
+
+```{r}
+df_old.total.monthly.conventional = df_old.total.weekly.conventional %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+
+
+df_old.total.monthly.organic = df_old.total.weekly.organic %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+```
+
+```{r}
+df_old.total.weekly.conventional$Total.Volume.Million = df_old.total.weekly.conventional$Total.Volume/1000000
+df_old.total.weekly.organic$Total.Volume.Million = df_old.total.weekly.organic$Total.Volume/1000000
+df_old.total.monthly.conventional$Total.Volume.Million = df_old.total.monthly.conventional$Total.Volume/1000000
+df_old.total.monthly.organic$Total.Volume.Million = df_old.total.monthly.organic$Total.Volume/1000000
+```
+
+
+## Exploratory Data Analysis
+
+
+## Monthly Volume
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df_old.total.monthly.conventional, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+m0 = lm(Total.Volume.Million ~ Average.Price, data = df_old.total.monthly.conventional)
+summary(m0)
+plot(m0)
+```
+
+```{r}
+plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Number of Avocados Sold')
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+old_monthly_conventional_volume <- ts(df_old.total.monthly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 12)
+
+old_monthly_conventional_volume %>% decompose(type="multiplicative") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Volume of Conventional Avocados Sold in the U.S. Show Seasonal Pattern")
+```
+
+
+
+```{r}
+library(tseries)
+adf.test(old_monthly_conventional_volume, alternative = "stationary")
+```
+
+
+```{r}
+library(vars)
+VARselect(df_old.total.monthly.conventional[, c('Average.Price', 'Total.Volume.Million')], 
+          lag.max=8,type="const")[["selection"]]
+```
+
+
+# Predicting the Full Time Range
+```{r}
+var1 <- VAR(df_old.total.monthly.conventional[, c('Average.Price', 'Total.Volume.Million')], 
+            p=1, type="const")
+serial.test(var1, lags.pt=10, type="PT.asymptotic")
+```
+
+```{r}
+var2 <- VAR(df_old.total.monthly.conventional[, c('Average.Price', 'Total.Volume.Million')],
+            p=2, type="const")
+serial.test(var2, lags.pt=10, type="PT.asymptotic")
+```
+
+```{r}
+var3 <- VAR(df_old.total.monthly.conventional[, c('Average.Price', 'Total.Volume.Million')], 
+            p=3, type="const")
+serial.test(var3, lags.pt=10, type="PT.asymptotic")
+```
+```{r}
+var2
+```
+
+```{r}
+summary(var2)
+```
+
+```{r}
+# forecast(var2) %>%
+#   autoplot() + xlab("Year")
+plot(predict(var2))
+```
+
+```{r}
+df_old.total.monthly.conventional[1:27, c('Average.Price', 'Total.Volume.Million')]
+```
+
+
+
+
+
+
+
+
+
+# Train/Test split
+```{r}
+var_tt1 <- VAR(df_old.total.monthly.conventional[1:27, c('Average.Price', 'Total.Volume.Million')], 
+            p=1, type="const")
+serial.test(var_tt1, lags.pt=10, type="PT.asymptotic")
+```
+
+```{r}
+var_tt2 <- VAR(df_old.total.monthly.conventional[1:27, c('Average.Price', 'Total.Volume.Million')],
+            p=2, type="const")
+serial.test(var_tt2, lags.pt=10, type="PT.asymptotic")
+```
+
+```{r}
+var_tt3 <- VAR(df_old.total.monthly.conventional[1:27, c('Average.Price', 'Total.Volume.Million')], 
+            p=3, type="const")
+serial.test(var_tt3, lags.pt=10, type="PT.asymptotic")
+```
+
+```{r}
+summary(var_tt2)
+```
+
+```{r}
+var_tt2_pred = predict(var_tt2, df_old.total.monthly.conventional[28:39, c('Average.Price', 'Total.Volume.Million')], n.ahead=12)
+matplot(1:12, cbind(old_monthly_conventional_volume[28:39], var_tt2_pred$fcst$Total.Volume.Million[, 'fcst']), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+```
+
+
+
+
+
+```{r}
+var_tt3_pred = predict(var_tt3, df_old.total.monthly.conventional[28:39, c('Average.Price', 'Total.Volume.Million')], n.ahead=12)
+matplot(1:12, cbind(old_monthly_conventional_volume[28:39], var_tt3_pred$fcst$Total.Volume.Million[, 'fcst']), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+```
+

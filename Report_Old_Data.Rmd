@@ -76,6 +76,40 @@ df_old.total.monthly.organic$Total.Volume.Million = df_old.total.monthly.organic
 ```
 
 
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ggtsdisplay(old_monthly_conventional_volume, points = FALSE, lag.max = 36)
+```
+
+```{r}
+ggtsdisplay(diff(df_old.total.monthly.conventional$Total.Volume.Million, difference = 1), points = FALSE, lag.max = 36)
+```
+```{r}
+ggtsdisplay(diff(df_old.total.monthly.conventional$Total.Volume.Million, difference = 2), points = FALSE, lag.max = 36)
+```
+```{r}
+ggtsdisplay(old_monthly_conventional_price, points = FALSE, lag.max = 36)
+```
+
+```{r}
+ggtsdisplay(diff(df_old.total.monthly.conventional$Average.Price, difference = 1), points = FALSE, lag.max = 36)
+```
+```{r}
+ggtsdisplay(diff(df_old.total.monthly.conventional$Average.Price, difference = 2), points = FALSE, lag.max = 36)
+```
+
+
+
 # EDA
 
 ## Weekly Volume
@@ -260,7 +294,9 @@ seasonal = list(order=c(0,1,2), period=12)))
 ```
 
 
-
+```{r}
+summary(fr_m4.2)
+```
 
 
 ```{r}
@@ -313,8 +349,6 @@ man.pre.month <- predict(man.fit.month, newxreg=df_old.total.monthly.conventiona
 matplot(1:12, cbind(old_monthly_conventional_volume[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
 # abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
 ```
-
-
 ```{r}
 # http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
 # par(mai=c(0.8,0.5,0.8,0.2))
@@ -322,6 +356,24 @@ fmanweek1 <- forecast(man.fit.month, xreg=df_old.total.monthly.conventional[["Av
 {plot(fmanweek1, main = "Prediction with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)', ylab = "Predicted Volume (in Millions)")
 lines(ts(old_monthly_conventional_volume))}
 ```
+
+```{r}
+summary(man.fit.month)
+```
+
+```{r}
+forecast::ggtsdisplay(fr_m4.2$residuals[28:39], points=FALSE, lag.max = 36)
+
+```
+
+```{r}
+checkresiduals(man.fit.month)
+```
+
+
+
+
+
 
 
 
