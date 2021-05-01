@@ -1,0 +1,312 @@
+---
+title: "Untitled1"
+author: "Yunyao Zhu"
+date: "4/29/2021"
+output: pdf_document
+---
+
+```{r fig.height = 3, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = Unemployment, y = Average.Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Per-Unit Prices and Unemployment Rates',
+       x = 'Unemployment Rates (%)',
+       y = 'Per-Unit Prices ($)')
+```
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold in Millions"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = CPI, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Consumer Price Indices (CPI)',
+       y = 'Total Number of Avocados Sold (in Millions)')
+```
+
+```{r}
+q2.lm0 = lm(Average.Price ~ Total.Volume.Million + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(q2.lm0)
+```
+
+
+```{r}
+plot(fitted.values(q2.lm0), residuals(q2.lm0), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+plot(residuals(q2.lm0), xlab = "Month", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+# abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(q2.lm0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Negatively Skewed")
+```
+
+```{r}
+vif(q2.lm0)
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+q2.lm0_residuals <- ts(residuals(q2.lm0), frequency = 12)
+
+q2.lm0_residuals %>% decompose() %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Residuals Show Seasonal Pattern")
+```
+
+```{r}
+q2.0.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Total.Volume.Million']],
+             df_old.total.monthly.conventional.merged[['Unemployment']],
+             df_old.total.monthly.conventional.merged[['CPI']])
+```
+
+
+# Seasonal Differencing
+```{r}
+(q2.m1.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,0,0), period=12), method="ML"))
+(q2.m1.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+```
+seems to prefer the seasonally differenced version
+
+
+```{r}
+ggtsdisplay(m1.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(m1.1$residuals, points = FALSE, lag.max = 27)
+```  
+
+In general, we would like to be conservative about differencing.
+
+
+# AR MA
+```{r}
+(q2.m2.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.m2.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.m2.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+```{r}
+ggtsdisplay(q2.m2.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m2.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m2.3$residuals, points = FALSE, lag.max = 27)
+```
+
+
+# Regular ARIMA
+```{r}
+(q2.m3.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+(q2.m3.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.m3.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.m3.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+```{r}
+ggtsdisplay(q2.m3.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m3.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m3.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m3.3$residuals, points = FALSE, lag.max = 27)
+```
+
+# Regular ARIMA
+```{r}
+(q2.m4.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+(q2.m4.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.m4.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.m4.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+```{r}
+ggtsdisplay(q2.m4.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m4.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m4.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.m4.3$residuals, points = FALSE, lag.max = 27)
+```
+
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+q2.sarima0 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,0, 1), period = 12, method="ML"))
+q2.sarima0.pred <- predict(q2.sarima0, newxreg=q2.0.covariates.mat[28:39],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.sarima0.pred$pred), ylim=c(0.8,1.6), type = "l", xlab = "Months (04/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+q2.sarima1 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order = c(0,1,2), period = 12, method="ML"))
+q2.sarima1.pred <- predict(q2.sarima1, newxreg=q2.0.covariates.mat[28:39],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.sarima1.pred$pred), ylim=c(0.8,1.6), type = "l", xlab = "Months (04/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+
+```{r}
+accuracy(object = q2.sarima0.pred$pred, x = old_monthly_conventional_price[28:39])
+accuracy(object = q2.sarima1.pred$pred, x = old_monthly_conventional_price[28:39])
+```
+
+
+
+
+```{r}
+(model0 = summary(lm(Average.Price ~ Unemployment + CPI, data = df_old.total.monthly.conventional.merged)))
+(model1 = summary(lm(Average.Price ~ Unemployment, data = df_old.total.monthly.conventional.merged)))
+(model2 = summary(lm(Average.Price ~ CPI, data = df_old.total.monthly.conventional.merged)))
+
+```
+
+
+```{r}
+m3 = lm(Average.Price ~ Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m3)
+```
+
+
+```{r}
+plot(fitted.values(m3), residuals(m3), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+plot(residuals(m3), xlab = "Month", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+# abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m3), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Negatively Skewed")
+```
+
+```{r}
+vif(m3)
+```
+
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+m3_residuals <- ts(residuals(m3), frequency = 12)
+
+m3_residuals %>% decompose() %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Residuals Show Seasonal Pattern")
+```
+
+```{r}
+q2.1.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Unemployment']],
+                            df_old.total.monthly.conventional.merged[['CPI']])
+```
+
+# Seasonal Differencing
+```{r}
+(q2.1.m1.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,0,0), period=12), method="ML"))
+(q2.1.m1.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+```
+seems to prefer the seasonally differenced version
+
+
+```{r}
+ggtsdisplay(q2.1.m1.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m1.1$residuals, points = FALSE, lag.max = 27)
+```  
+
+
+# AR MA
+```{r}
+(q2.1.m2.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.1.m2.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.1.m2.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+```{r}
+ggtsdisplay(q2.1.m2.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m2.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m2.3$residuals, points = FALSE, lag.max = 27)
+```
+
+
+# Regular ARIMA
+```{r}
+(q2.1.m3.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+(q2.1.m3.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.1.m3.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.1.m3.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+
+```{r}
+ggtsdisplay(q2.1.m3.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m3.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m3.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m3.3$residuals, points = FALSE, lag.max = 27)
+```
+
+
+# Regular ARIMA
+```{r}
+(q2.1.m4.0 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,0), period=12), method="ML"))
+(q2.1.m4.1 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(1,1,0), period=12), method="ML"))
+(q2.1.m4.2 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,1), period=12), method="ML"))
+(q2.1.m4.3 = Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,2), period=12), method="ML"))
+```
+
+
+```{r}
+ggtsdisplay(q2.1.m4.0$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m4.1$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m4.2$residuals, points = FALSE, lag.max = 27)
+ggtsdisplay(q2.1.m4.3$residuals, points = FALSE, lag.max = 27)
+```
+
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+q2.1.sarima0 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12, method="ML"))
+q2.1.sarima0.pred <- predict(q2.1.sarima0, newxreg=q2.1.covariates.mat[28:39],  n.ahead=12)
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.1.sarima0.pred$pred), type = "l", xlab = "Months (04/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Price ($)", main = "Per-Unit Price Prediction")
+
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+# https://stat.ethz.ch/pipermail/r-help/2008-June/165558.html
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.1.sarima0.pred$pred), ylim=c(0.8,1.6), type = "l", xlab = "Months (04/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
+q2.1.sarima1 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order = c(0,1,2), period = 12, method="ML"))
+q2.1.sarima1.pred <- predict(q2.1.sarima1, newxreg=q2.1.covariates.mat[28:39],  n.ahead=12)
+```
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.1.sarima1.pred$pred), type = "l", xlab = "Months (04/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+```{r}
+accuracy(object = q2.1.sarima0.pred$pred, x = old_monthly_conventional_price[28:39])
+accuracy(object = q2.1.sarima1.pred$pred, x = old_monthly_conventional_price[28:39])
+```

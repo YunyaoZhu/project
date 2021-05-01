@@ -17,6 +17,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
 library(tidyverse)
 library(lubridate) # extract month
 library(forecast)
+library(car)
+library(tseries) # adf.test (Augmented Dickey-Fuller Test)
 ```
 
 ## Exploratory Data Analysis
@@ -202,10 +204,100 @@ plot(fitted.values(m0), residuals(m0), xlab = "Fitted Values", ylab = "Residuals
 main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
 abline(h=0, col="red")
 ```
+```{r}
+residuals(m0)
+```
+
+
+```{r}
+plot(residuals(m0), xlab = "Month", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+# abline(h=0, col="red")
+```
 
 ```{r}
 hist(residuals(m0), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
 ```
+
+```{r}
+m1 = lm(Total.Volume.Million ~ Average.Price + Earnings + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m1)
+plot(m1)
+```
+```{r}
+vif(m2)
+```
+
+```{r}
+m2 = lm(Total.Volume.Million ~ Average.Price + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m2)
+plot(m2)
+```
+
+
+```{r}
+plot(fitted.values(m2), residuals(m2), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+plot(residuals(m2), xlab = "Fitted Values", ylab = "Residuals", 
+main = "Heteroscedasticity in Residuals vs. Fitted Value plot")
+abline(h=0, col="red")
+```
+
+```{r}
+hist(residuals(m2), xlab = "Residuals", ylab = "Frequency", main = "Residuals Slightly Positively Skewed")
+```
+```{r fig.height = 5, fig.width = 7, fig.cap="Time Series Plot of Total Volume of Conventional Avocados in the U.S."}
+# time series plots: 
+# https://otexts.com/fpp2/ts-objects.html
+# https://otexts.com/fpp2/stl.html
+# https://otexts.com/fpp2/classical-decomposition.html
+
+m2_residuals <- ts(residuals(m2), frequency = 12)
+
+m2_residuals %>% decompose() %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Residuals Show Seasonal Pattern")
+```
+
+```{r}
+adf.test(m2_residuals, alternative = "stationary")
+```
+
+
+```{r}
+ggtsdisplay(m2_residuals, points = FALSE, lag.max = 39)
+adf.test(m2_residuals, alternative = "stationary")
+```
+
+```{r}
+ggtsdisplay(diff(m2_residuals, difference = 1), points = FALSE, lag.max = 39)
+adf.test(diff(m2_residuals, difference = 1), alternative = "stationary")
+```
+```{r}
+ggtsdisplay(diff(m2_residuals, difference = 2), points = FALSE, lag.max = 39)
+adf.test(diff(m2_residuals, difference = 2), alternative = "stationary")
+```
+
+```{r}
+ggtsdisplay(diff(m2_residuals, difference = 3), points = FALSE, lag.max = 39)
+adf.test(diff(m2_residuals, difference = 3), alternative = "stationary")
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Total Volume of Avocados Sold"}
 ggplot(data = df_old.total.monthly.conventional, aes(x = Year.Month, y = Total.Volume.Million)) +
@@ -230,8 +322,6 @@ old_monthly_conventional_volume %>% decompose(type="multiplicative") %>%
 ```
 
 ```{r}
-library(tseries)
-
 adf.test(old_monthly_conventional_volume, alternative = "stationary")
 ```
 
@@ -249,7 +339,7 @@ adf.test(week_price.diff,alternative = "stationary")
 
 ```{r}
 df_old.total.monthly.conventional$Total.Volume.Million %>%
-  ggtsdisplay(xlab="Year",
+  ggtsdisplay(xlab="Month",
     main="Total Volume")
 ```
 
@@ -301,7 +391,7 @@ summary(fr_m4.2)
 
 ```{r}
 df_old.total.monthly.conventional$Total.Volume.Million %>% diff(lag=1) %>%
-  ggtsdisplay(xlab="Year",
+  ggtsdisplay(xlab="Month",
     main="Seasonally differenced Total Volume")
 ```
 
@@ -349,6 +439,21 @@ man.pre.month <- predict(man.fit.month, newxreg=df_old.total.monthly.conventiona
 matplot(1:12, cbind(old_monthly_conventional_volume[28:39], man.pre.month$pred), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
 # abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
 ```
+
+
+```{r}
+# par(cex=0.7, mfrow=c(1,2)) 
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+matplot(1:12, cbind(old_monthly_conventional_volume[28:39], man.pre.month$pred, old_monthly_conventional_volume[15:27]), type = "l", xlab = "Months (03/2017-03/2018)\n(Prediction Period Only)", ylab = "Predicted Volume (in Millions)", main = "One-Year Sales Volume Prediction")
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+```
+
+```{r}
+fmanweek1
+```
+
+
+
 ```{r}
 # http://www.sthda.com/english/wiki/abline-r-function-an-easy-way-to-add-straight-lines-to-a-plot-using-r-software
 # par(mai=c(0.8,0.5,0.8,0.2))
@@ -449,6 +554,7 @@ df.earnings.month = df.earnings.month %>% rename(Earnings = 'Value')
 
 
 ```{r}
+# https://stackoverflow.com/questions/21982987/mean-per-group-in-a-data-frame
 df.unemployment.month = read.csv('unemployment_rate.csv')[ ,c('Year', 'Label', 'Value')]
 df.unemployment.month$Month = substr(df.unemployment.month$Label, 6, 8)
 df.unemployment.month$Month = match(df.unemployment.month$Month, month.abb)
@@ -507,9 +613,23 @@ ggplot(data = df_old.total.monthly.conventional.merged, aes(x = CPI, y = Average
 
 
 ```{r}
-m1 = lm(Average.Price ~ Earnings + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
-summary(m1)
-plot(m1)
+m4 = lm(Average.Price ~ Total.Volume.Million + Earnings + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m4)
+plot(m4)
+```
+```{r}
+vif(m4)
+```
+
+
+```{r}
+m5 = lm(Average.Price ~ Total.Volume.Million + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+summary(m5)
+plot(m5)
+```
+
+```{r}
+vif(m5)
 ```
 
 
@@ -534,7 +654,7 @@ adf.test(old_monthly_conventional_price.diff,alternative = "stationary")
 
 ```{r}
 df_old.total.monthly.conventional$Average.Price %>%
-  ggtsdisplay(xlab="Year",
+  ggtsdisplay(xlab="Month",
     main="Total Volume")
 ```
 ```{r}
@@ -604,7 +724,7 @@ seasonal = list(order=c(0,1,2), period=12)))
 
 ```{r}
 df_old.total.monthly.conventional$Average.Price %>% diff(lag=1) %>%
-  ggtsdisplay(xlab="Year",
+  ggtsdisplay(xlab="Month",
     main="Seasonally differenced Average Price")
 ```
 

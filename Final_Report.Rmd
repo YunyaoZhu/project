@@ -1,0 +1,573 @@
+---
+title: "Predicting Sales of Hass Avocados"
+author: "Yunyao Zhu"
+date: "4/30/2021"
+output: 
+  pdf_document:
+    number_sections: true
+fig_caption: yes
+fontsize: 11pt
+header-includes: 
+  - \usepackage{breqn}
+  - \usepackage{amsmath}
+bibliography: sources.bib
+nocite: '@*'
+link-citations: yes
+biblio-style: "apalike"
+linkcolor: gray
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = FALSE)
+library(tidyverse)
+library(lubridate) # extract month
+library(forecast)
+library(car)
+library(tseries) # adf.test (Augmented Dickey-Fuller Test)
+library(knitr)
+library(corrplot) # corrplot
+library(gridExtra)
+```
+
+<!-- ## Exploratory Data Analysis -->
+```{r}
+df_old = read.csv('avocado.csv')
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+
+df_old = df_old %>%
+  rename(
+    Average.Price = 'AveragePrice',
+    Small = 'X4046',
+    Large = 'X4225',
+    XLarge = 'X4770',
+    Type = 'type',
+    Year = 'year',
+    Region = 'region'
+  )
+```
+
+```{r}
+# https://stackoverflow.com/questions/4310326/convert-character-to-date-in-r
+# https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
+df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
+df_old$Month = month(df_old$Date)
+df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old = df_old[order(df_old$Date), ]
+```
+
+```{r}
+df_old.total.weekly.conventional = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'conventional'), ]
+df_old.total.weekly.organic = df_old[(df_old$Region == 'TotalUS') & (df_old$Type == 'organic'), ]
+```
+
+```{r}
+df_old.total.monthly.conventional = df_old.total.weekly.conventional %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+
+
+df_old.total.monthly.organic = df_old.total.weekly.organic %>%
+                              group_by(Year.Month) %>%
+                              summarise_at(vars(Date, Average.Price, Total.Volume, Small, Large, XLarge, Total.Bags, Small.Bags, Large.Bags, XLarge.Bags), funs(mean(., na.rm=TRUE)))
+```
+
+```{r}
+df_old.total.weekly.conventional$Total.Volume.Million = df_old.total.weekly.conventional$Total.Volume/1000000
+df_old.total.weekly.organic$Total.Volume.Million = df_old.total.weekly.organic$Total.Volume/1000000
+df_old.total.monthly.conventional$Total.Volume.Million = df_old.total.monthly.conventional$Total.Volume/1000000
+df_old.total.monthly.organic$Total.Volume.Million = df_old.total.monthly.organic$Total.Volume/1000000
+```
+
+<!-- ### Join New Datasets -->
+```{r}
+df.unemployment.month = read.csv('unemployment_rate.csv')[ ,c('Year', 'Label', 'Value')]
+df.unemployment.month$Month = substr(df.unemployment.month$Label, 6, 8)
+df.unemployment.month$Month = match(df.unemployment.month$Month, month.abb)
+df.unemployment.month = df.unemployment.month[ ,c('Year', 'Month', 'Value')]
+
+df.unemployment.month$Year.Month = paste(as.character(df.unemployment.month$Year), sprintf("%02d",df.unemployment.month$Month), sep="-")
+
+df.unemployment.month = df.unemployment.month %>% rename(Unemployment = 'Value')
+```
+
+```{r}
+df.cpi.month = read.csv('consumer_price_index_all_items.csv')
+df.cpi.month$Date = as.Date(df.cpi.month$DATE, "%m/%d/%y")
+df.cpi.month$Year = year(df.cpi.month$Date)
+df.cpi.month$Month = month(df.cpi.month$Date)
+df.cpi.month = df.cpi.month[ ,c('Year', 'Month', 'USACPIALLMINMEI', 'Date')]
+
+df.cpi.month$Year.Month = paste(as.character(df.cpi.month$Year), sprintf("%02d",df.cpi.month$Month), sep="-")
+
+df.cpi.month = df.cpi.month %>% rename(CPI = 'USACPIALLMINMEI')
+```
+
+```{r}
+df_old.total.monthly.conventional.merged = cbind(df_old.total.monthly.conventional, df.unemployment.month['Unemployment'], df.cpi.month['CPI'])
+```
+
+# Introduction
+
+In 2017, a property developer claimed that millennials were spending too much money on avocado toast instead of saving for their first home [@Millennials]. While the millennial avocado toast stereotype is by no means convincing, avocados are indeed a favored fruit in the U.S. According to a market report released by the United States Agency for International Development [@Market], the U.S. is the world’s biggest importer of avocados. In recent years, avocados have been marketed as a healthy dietary choice and a good source of beneficial monounsaturated oil [@Health_benefits]. As more health benefits are discovered and promoted, demand for avocados surged even more and so did the price. 
+
+From the perspective of a retailer or a consumer, it would be helpful to be able to reasonably forecast the per-unit retail price of avocados. For a grower or a marketer, being able to predict the sales volume of avocados would help inform business strategies. Thus, for this project, our goal is to attempt to forecast avocado sales volumes and prices using publicly accessible data.
+
+## Data
+
+The dataset used in this analysis is the publicly available Kaggle Avocado Prices dataset, which credited the Hass Avocado Board for the collection and release of the data. This dataset contains 13 variables encompassing the per-unit prices, total sales volumes, regions, and sizes of Hass avocados, a cultivar of avocados. Specifically, the per-unit prices are the average retail price of individual avocados. The total sales volume is the count number of individual avocados sold. Considering the magnitude of this variable is unusually large (an 8-digit value), we recoded it in millions of avocados sold to keep it as a value under 100.
+
+Data from the start of 2015 to the end of the first quarter of 2018 are available. Each entry represents one observation from one region in the U.S. during one week. To smooth out the data, we aggregated the weekly raw data into monthly values by taking the mean. The following analyses are based on the monthly version of the data. Additional analyses on the weekly version of the data yield similar results and are included in !!!!!!!!!!!!!!!!!!!Appendix ??.
+
+To enrich this dataset, we join it with selected macroeconomic data. Specifically, we included the unadjusted monthly unemployment rate released by the U.S. Bureau of Labor Statistics and the unadjusted monthly Consumer Price Index (CPI) for all items in the U.S. (assuming the index 2015 is 100) provided by the Federal Reserve Bank. The rationales for selecting these external data will be explained in the methodology section.
+
+## Research Goals
+
+For this project, we focus on Hass conventional (non-organic) avocados sold in the U.S. We plan to conduct the forecast from April 2017 to March 2018, which corresponds to the last year in our dataset. We make predictions on one full year because we suspect that there might be some seasonal patterns in avocado sales volume and prices that repeat annually. We choose to use the last year in our dataset because we would like to compare our predicted values to the actual results.
+
+Thus, we specify our research goals as follows:
+
+1. From the perspective of a grower/marketer, we would like to reasonably predict the total number of conventional Hass avocados sold in the U.S. from April 2017 to March 2018.
+
+2. From the perspective of a buyer/consumer, we would like to reasonably predict the per-unit retail prices of conventional Hass avocados in the U.S. from April 2017 to March 2018.
+
+## Paper Outline
+
+The paper is organized as follows: 
+
+Sections 2 and 3 will address the two research goals respectively. Each of these two sections will include its corresponding methodology, results, and discussion subsections. Section 4 concludes with a discussion of the strengths and limitations of the project. Section 5 is the Appendix and Section 6 is the Bibliography.
+
+\newpage
+
+# Research Goal \texttt{\#}1: Predicting Sales Volume
+
+## Variables and EDA
+
+For the first research question, our numerical response variable is the total count number (in millions) of conventional avocados sold in the U. S. The main predictor of interest is the per-unit retail price of avocados in dollars. Intuitively, we might expect higher sales volume when the price is low and vice versa. The data supports this intuition. As shown in Figure 1, we largely see higher sales volume associated with lower per-unit prices. The gray line represents the OLS model $\text{Total Volume}_i = \beta_0 + \beta_1 \  \text{Per-Unit Price}_i$, and the gray region shows its 95% confidence interval. We observe a potential inverse relationship between the total sales volume and the pre-unit price of avocados.
+
+```{r q1-scatter, fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Total Volume of Avocados Sold in Millions v.s. Per-Unit Price of Avocados"}
+# https://stackoverflow.com/questions/28243514/ggplot2-change-title-size
+# https://stackoverflow.com/questions/14942681/change-size-of-axes-title-and-labels-in-ggplot2
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = Average.Price, y = Total.Volume.Million)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Total Volume and Price',
+       x = 'Per-Unit Price ($)',
+       y = 'Total Sales Volume (in Millions)') +
+  theme(plot.title = element_text(size=10, face="bold"),
+        axis.title = element_text(size=10))
+```
+
+Another independent variable of interest is the unemployment rate. In economics, the unemployment rate is defined as the proportion of unemployed individuals in the labor force [@Unemployment_definition]. Since unemployed persons usually lose purchasing power, a high unemployment rate can potentially be associated with a decline in the retail sector [@Unemployment_implication]. In addition to the unemployment rates, the Consumer Price Index (CPI) is also a commonly used macroeconomic indicator. Specifically, the CPI is a measure of ``the average change over time in the prices paid by urban consumers for a market basket of consumer goods and services" ''[@BLS_CPI]. In other words, CPI can be used to assess price changes associated with the cost of living [@CPI_implication]. We hope to potentially control for some measure of the changes in the price level of consumer goods overall [@CPI_price_level].
+
+
+## Methodology
+
+
+
+### Issues with a Multiple Regression Model
+
+As a first step, it seems intuitive to use multiple linear regression to model the relationship between the total sales volume and the price, unemployment rate, and CPI. We specify the model as follows:
+
+$$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i + \beta_3 \ \text{CPI}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
+
+However, an examination of model assumptions reveal that a few of the assumptions of an OLS model are violated. First, when checked for evidence of multicollinearity, the VIF values are all less than 5, which seem to fall into the commonly acceptable range [@VIF_range]. However, as shown in the correlation plot [Appendix?, Figure?], the correlation between unemployment rate and CPI turns out to be -0.824, which is relatively high. As a reference, the frequently used threshold for the indication of potential multicollinearity is a correlation of magnitude 0.7 [@Common_cutoff]. This high magnitude of correlation might not be a surprise to economists. The CPI can be used as a measure of inflation, and inflation and unemployment are traditionally said to be inversely correlated [@CPI_unemployment_relationship]. To address the issue of multicollinearity, we have tried removing one of the highly correlated predictors. Removing one predictor indeed changes the OLS model outputs. Specifically, after removing CPI, the estimated coefficient of the unemployment rate changes from a positive value to a negative value. This updated result seems to conform to our expectation that higher unemployment rate is associated with lower sales volume. In addition, the magnitude of correlation between CPI and per-unit price (0.544) is slightly higher than the magnitude of correlation between unemployment rate and per-unit price (0.523). Thus, we decided to remove CPI as a predictor and attempt the following model:
+
+$$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
+
+However, even in this updated model, some assumptions of this OLS model are still violated. Most notably, the residuals seem to have a non-constant variance [Figure 2(a)] and also seem to be correlated over time, or autocorrelated [Figure 2(b)].
+
+```{r fig.height = 3.5, fig.width = 8, fig.cap="(a) Residuals vs. Fitted Values Plot and (b) Residuals vs. Time Plot"}
+q1.lm.updated = lm(Total.Volume.Million ~ Average.Price + Unemployment, data = df_old.total.monthly.conventional.merged)
+
+# https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+par(cex=0.7, mfrow=c(1,2))
+plot(fitted.values(q1.lm.updated), residuals(q1.lm.updated), xlab = "Fitted Values", ylab = "Residuals", 
+main = "(a) Potential Heteroscedasticity in\nResiduals vs. Fitted Values plot", cex.main=0.85)
+abline(h=0, col="red")
+
+plot(residuals(q1.lm.updated), type = "b", xlab = "Months", ylab = "Residuals", xaxt="n", 
+main = "(b) Potential Seasonal Patterns in\nResiduals vs. Time plot", cex.main=0.85)
+axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2018'))
+```
+
+Actually, the patterns we observe in Figure ? is somewhat expected since we are analyzing time series data. A time series is a sequence of values taken at successive equally spaced points in time [@Time_series_definition]. In this case, the time period is a month. When we use regression to model time series data, the error terms are often autocorrelated [@ARIMA_errors_traffic_study]. In addition to observing the residual plots, we typically use the Autocorrelation Function (ACF) plots and the Partial Autocorrelation Function (PACF) plots to detect autocorrelation in the residuals [@ACF_PACF]. We can take autocorrelation into account by adding structures such as autoregression (AR), moving average (MA), and/or using techniques such as differencing.
+
+After examining the ACF and PACF plots [Appendix ? Figure ?], we realized that the patterns we observe in the Figure ? might be evidence of AR or MA structures. In addition, the decomposition plot of the residuals [Appendix ? Figure ?] show seasonal patterns, suggesting that we might need to incorporate seasonal differencing. To account for these structures, we choose to use a regression with Seasonal Autoregressive Integrated Moving Average (SARIMA) errors [@ARIMA_errors_traffic_study; @Regression_with_ARIMA_errors_penn; @Regression_with_ARIMA_errors_Hyndman].
+
+### Regression with SARIMA Errors
+
+A regression with SARIMA errors is similar to an OLS model except for a different error structure [@SARIMA_with_errors]. Specifically, we can define our new model as:
+
+$$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i + n_i$$
+
+The $n_i$, or the errors of the regression, is modeled by SARIMA. SARIMA models are usually concisely represented as $(p, d, q) \times (P, D, Q)_s$, where the lowercase letters correspond to the non-seasonal components and the uppercase letters correspond to the seasonal components. Specifically, the parameter $p$ is the number of time lags for the autoregressive (AR) model, $d$ is the degrees of differencing, and $q$ is the orders of the moving-average (MA) model. The uppercase $P, D, Q$ denote the autoregressive, differencing, and moving average terms for the seasonal part of the ARIMA model. Lastly, $s$ denotes the time period, in this case, $s$ is 12, denoting the 12 months in a year in our monthly version of the data.[@ARIMA_Notation]. The values of the parameters are determined using principles from the Box–Jenkins method [@ARIMA_Box_Jenkins]. We choose to describe the error terms by a $(1, 0, 0) \times (0, 1, 0)_{12}$ process; the parameter selection procedure is described in Appendix ?.
+
+Thus, we can express the error terms as follows:
+
+$$n_i = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_i$$ where $\phi$ is the autoregression parameter, $a_i$ is assumed to be white noise [@ARIMA_errors_traffic_study], and $L$ is the lag operator (i.e. $L^k\ y_t = y_{t-k}$) [@Lag_operator].
+
+The main assumption to check for a SARIMA model is that the residuals indeed follows a white noise process. Specifically, this means that the residuals should largely have a mean of zero, have constant variance and also be uncorrelated [@SARIMA_assumptions]. As shown in Figure?, these assumptions all seem to be satisfied.
+
+We used the \texttt{Arima()} function in the R \texttt{forecast} to fit this regression model with SARIMA errors and the \texttt{predict()} function to make the forecast. Further details are included in Appendix ?. The data from January 2015 to February 2017 are used to fit the model, while the forecast is made from April 2017 to March 2018.
+
+## Results
+```{r fig.height = 4, fig.width = 5.5, fig.cap="Predicting the Monthly Avocado Sales Volume from 2017-2018"}
+
+old_monthly_conventional_volume = ts(df_old.total.monthly.conventional.merged$Total.Volume.Million, start = c(2015, 1), frequency = 12)
+
+q1.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Average.Price']],
+             df_old.total.monthly.conventional.merged[['Unemployment']])
+
+q1.sarima <- Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
+q1.sarima.pred <- predict(q1.sarima, newxreg=q1.covariates.mat[28:39],  n.ahead=12)
+
+# par(cex=0.7, mfrow=c(2,1))
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+# hide tick marks: http://www.sthda.com/english/wiki/add-custom-tick-mark-labels-to-a-plot-in-r-software#hide-tick-marks
+# add self-defined tick mark labels: https://stat.ethz.ch/pipermail/r-help/2008-March/158056.html
+# legend: https://stackoverflow.com/questions/27796583/how-to-add-colour-matched-legend-to-a-r-matplot
+# font size: https://www.dummies.com/programming/r/how-to-change-plot-options-in-r/
+
+matplot(1:12, 
+        cbind(old_monthly_conventional_volume[28:39], 
+              q1.sarima.pred$pred, 
+              old_monthly_conventional_volume[16:27]), 
+        type = "l", 
+        xlab = "Months (04/2017-03/2018)", 
+        ylab = "Volume (in Millions)", 
+        xaxt="n",
+        main = "One-Year Sales Volume Prediction",
+        cex.main=0.85,
+        cex.axis=0.8,
+        cex.lab=0.8)
+axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+legend("bottomleft", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
+# abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
+
+# q1.sarima.forecast <- forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
+# {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
+# lines(ts(old_monthly_conventional_volume))}
+```
+
+```{r}
+q1.names = rbind("Sales Volume Prediction", "Sales Volume from Previous Year")
+q1.values = rbind(round(accuracy(object = q1.sarima.pred$pred, x = old_monthly_conventional_volume[28:39])[,2],3),
+  round(accuracy(object = old_monthly_conventional_volume[16:27], x = old_monthly_conventional_volume[28:39])[,2],3))
+
+q1.table = data.frame(cbind(q1.names, q1.values))
+
+kable(q1.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+```
+
+
+## Interpretation and Conclusion
+
+Figure ? shows the prediction results. The red dashed line shows the predicted sales volume from April 2017 to March 2018 while the black line shows the actual sales volume during the same time period. The green dotted line is the sales volume in the previous year (i.e. from April 2016 to March 2017). If we do not fit a model and simply use the sales volumes from the previous year, we could still roughly approximate the sales volumes. However, our predicted values seem to match more closely with the actual sales volumes. A commonly used metric to evaluate forecast accuracy is the Root Mean Square Error (RMSE) [@Forecast_evaluation]. RMSE is the standard deviation of the prediction errors [@RMSE_definition]. In general, we prefer smaller RMSE values. 
+
+The RMSE of our prediction is approximately 2.085, which is smaller than an RMSE of 4.115 if we simply use the previous year's sales values. In the context of this analysis, this means that 2.085 is the square root of the mean of squared differences between the actual sales volumes and our predicted sales volumes [@RMSE_interpretation]. One advantage of the RMSE metric is that it has the same units as the response variable [@RMSE_units]; in this case, the unit is millions of avocados. While an RMSE of 2.085 million avocados is a considerable quantity, we recall that our response variable is the total number of avocados sold in the U.S. as a whole. In addition, as shown in Figure ?, the sales volume in one year can range from around 25 to 45 million avocados. Thus, we consider an RMSE of 2.085 million avocados an acceptable value in this context and conclude that we have made a reasonable prediction using our limited data.
+
+It is worth noting that our predicted values under-predict the sales volume during the entire prediction time period. This might be due to other factors such as the changes in the supply volume and/or the quality of the supply.
+
+The parameter estimates of the SARIMA model are usually not directly interpretable. We have included the values in Appendix ?, Table ? for reference.
+
+\newpage
+# Research Goal \texttt{\#}2: Predicting Per-Unit Price
+
+## Variables and EDA
+Our numerical response variable for the second research goal is the average per-unit retail price of conventional avocados in the U.S. It is very tempting to include the total sales volume as the predictor given the potential inverse relationship shown in Figure 1. However, we recognize that we would not know the sales volume when we do not know the retail prices. Thus, it does not make sense to use the sales volume to predict the prices. One counter-argument is that we can potentially use the sales volume as a proxy for demand. While this is not entirely convincing, we created a model which includes the sales volume as a predictor in a sensitivity analysis in Appendix ?. For the main analysis, we choose to proceed without the sales volume variable.
+
+```{r fig.height = 2.8, fig.width = 6, fig.cap="Scatter Plot of Per-Unit Price v.s. Unemployment Rate"}
+ggplot(data = df_old.total.monthly.conventional.merged, aes(x = Unemployment, y = Average.Price)) +
+  geom_point() +
+  geom_smooth(method = "lm", col='grey') + 
+  labs(title = 'Potential Inverse Relationship between Price and Unemployment Rate',
+       x = 'Unemployment Rate (%)',
+       y = 'Per-Unit Price ($)') +
+  theme(plot.title = element_text(size=10, face="bold"),
+        axis.title = element_text(size=10))
+```
+
+Other available predictors are the macroeconomic measures unemployment rate and CPI. In general, we expect higher unemployment rates to be associated with lower prices. As shown in Figure ?, there indeed seems to be a potential inverse relationship between the unemployment rate and per-unit prices of avocados. On the other hand, since CPI can be interpreted as a measure of inflation [@CPI_implication], we expect higher CPI values to be associated with high prices. When plotting the prices against the CPI values, we find a potential positive relationship between the two variables as expected.
+
+\newpage
+
+## Issues with an OLS Model
+
+As discussed in Section 2, we observed a high magnitude of correlation between unemployment rate and CPI, suggesting potential multicollinearity. To address this issue, we also tried removing one of the two predictors. In this case, removing either the CPI or the unemployment rate does not change the OLS model outputs by much. Proceeding with either model yields very similar results. Thus, we choose to present the following model using unemployment rate as the predictor while noting that we could instead use CPI as the predictor and the following procedure would be roughly the same.
+
+We specify the OLS model as follows:
+
+$$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$
+
+We note that some assumptions of this OLS model are still violated. For instance, the residuals seem to have a non-constant variance [Figure 2(a)] and also seem to be correlated over time, or autocorrelated [Figure 2(b)]. The decomposition plot [Appendix ?, Figure ?], shows potential seasonal patterns, and the ACF and PACF plots [Appendix ?, Figure ?] show evidence of autocorrelation.
+
+```{r fig.height = 3.5, fig.width = 8, fig.cap="(a) Residuals vs. Fitted Values Plot and (b) Residuals vs. Time Plot"}
+q2.lm.updated = lm(Average.Price ~ Unemployment, data = df_old.total.monthly.conventional.merged)
+
+# https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+par(cex=0.7, mfrow=c(1,2))
+plot(fitted.values(q2.lm.updated), residuals(q2.lm.updated), xlab = "Fitted Values", ylab = "Residuals", 
+main = "(a) Potential Heteroscedasticity in\nResiduals vs. Fitted Values plot", cex.main=0.85)
+abline(h=0, col="red")
+
+plot(residuals(q2.lm.updated), type = "b", xlab = "Months", ylab = "Residuals", xaxt="n", 
+main = "(b) Potential Seasonal Patterns in\nResiduals vs. Time plot", cex.main=0.85)
+axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2018'))
+```
+
+Similar to our arguments in Section 2, we would like to account for these structures using a regression with Seasonal Autoregressive Integrated Moving Average (SARIMA) errors. 
+
+###Regression with SARIMA Errors
+
+From Section 2, we know we can express our regression with SARIMA errors as follows:
+
+$$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \ \text{Unemployment Rate}_i + n_i$$ 
+
+where the information remaining in the error terms are modeled by SARIMA $(p, d, q) \times (P, D, Q)_s$. We use the Box-Jenkins method [@ARIMA_Box_Jenkins] detailed in Appendix ? to select the values of $p, d, q$ and $P, D, Q$. We thus have:
+
+$$n_i = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_i$$ where $\phi$ is the autoregression parameter, $a_i$ is assumed to be white noise, and $L$ is the lag operator (i.e. $L^k\ y_t = y_{t-k}$) [@Lag_operator].
+
+Figure ? in Appendix ? shows that our the residuals of our regression with SARIMA errors model follows a white noise process, satisfying the assumptions of zero mean, constant variance, and uncorrelated residuals [@SARIMA_assumptions].
+
+We note that the data from January 2015 to February 2017 are used to fit the model, while the forecast is made from April 2017 to March 2018.
+
+
+## Results
+```{r fig.height = 4, fig.width = 5.5, fig.cap="Predicting the Per-Unit Price of Avocados from 2017-2018"}
+
+old_monthly_conventional_price = ts(df_old.total.monthly.conventional.merged$Average.Price, start = c(2015, 1), frequency = 12)
+
+q2.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Unemployment']])
+
+q2.sarima <- Arima(old_monthly_conventional_price[1:27], xreg=q2.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
+q2.sarima.pred <- predict(q2.sarima, newxreg=q2.covariates.mat[28:39],  n.ahead=12)
+
+# par(cex=0.7, mfrow=c(2,1))
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+# hide tick marks: http://www.sthda.com/english/wiki/add-custom-tick-mark-labels-to-a-plot-in-r-software#hide-tick-marks
+# add self-defined tick mark labels: https://stat.ethz.ch/pipermail/r-help/2008-March/158056.html
+# legend: https://stackoverflow.com/questions/27796583/how-to-add-colour-matched-legend-to-a-r-matplot
+# font size: https://www.dummies.com/programming/r/how-to-change-plot-options-in-r/
+
+matplot(1:12, 
+        cbind(old_monthly_conventional_price[28:39], 
+              q2.sarima.pred$pred, 
+              old_monthly_conventional_price[16:27]), 
+        type = "l", 
+        xlab = "Months (04/2017-03/2018)", 
+        ylab = "Per-Unit Price ($)", 
+        xaxt="n",
+        main = "One-Year Per-Unit Price Prediction",
+        cex.main=0.85,
+        cex.axis=0.8,
+        cex.lab=0.8)
+axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+legend("topright", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
+
+# q1.sarima.forecast <- forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
+# {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
+# lines(ts(old_monthly_conventional_volume))}
+```
+
+
+```{r}
+q2.names = rbind("Per-Unit Price Prediction", "Per-Unit Price from Previous Year")
+q2.values = rbind(round(accuracy(object = q2.sarima.pred$pred, x = old_monthly_conventional_price[28:39])[,2],3),
+  round(accuracy(object = old_monthly_conventional_price[16:27], x = old_monthly_conventional_price[28:39])[,2],3))
+
+q2.table = data.frame(cbind(q2.names, q2.values))
+
+kable(q2.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+```
+
+## Interpretation and Conclusion
+
+The predicted results are shown in Figure?. The black line shows the actual per-unit retail price of avocados from April 2017 to March 2018, the dashed red line represents the predicted results, and the green dotted line is the per-unit price from the previous year (April 2016 to March 2017). 
+
+First, we notice that the predicted values do not match the actual results very closely. The seasonal trend is largely captured, but there seems to be a slight "delay" in the predicted values. For instance, according to actual values, the per-unit price peaked in September 2017, while the highest predicted value occurs in October 2017. The price drop between September and October 2017 in the actual values is somewhat mirrored in our prediction, although the drop is shifted one month back. 
+
+Actually, our predicted values are closer to last year's prices than to the actual prices. This is likely due to our lack of external data. Perhaps we have not accounted for some important changes in the production of Hass avocados in our model. For example, it is said that the Hass cultivar has a tendency to bear well in alternate years. After a season with a relatively low yield, due to factors such as cold weather, the Hass avocado trees tend to produce more abundantly the next season. When the crop depletes the stored nutrients, the yield in the upcoming season would be reduced, thus establishing an alternate bearing pattern [@Health_benefits]. In future analyses, if we would have access to actual production data and/or a longer time period (i.e. more than three years of data), we would potentially be able to make a better forecast. 
+
+Nonetheless, given our current data and model, our predicted values are closer to the truth than that of simply using the prices from the previous year. Specifically, the RMSE of our prediction is 0.167, which is smaller than the RMSE of the prices from last year (0.233). In the context of this analysis, \$0.167 is the square root of the mean of the squared differences between the actual per-unit retail prices of avocados and our predicted prices. Given that the actual average per-unit price of avocados can range from around \$1.0 to \$1.6, we consider an RMSE of \$0.167 an acceptable value given our limited data.
+
+We have included the table of estimated parameter values in Appendix ?, Table ?.
+
+# Discussion
+In this project, we used regression models with SARIMA errors to predict the sales of Hass avocados. As discussed in the previous two sections, we believe we have reasonable addressed our two research goals. Specifically, we are able to predict the total sales volume of conventional avocados in the U.S. from April 2017 to March 2018 with a RMSE of 2.805 million avocados. We then predicted the average per-unit retail price of conventional avocados in the U.S. from April 2017 to March 2018 with a RMSE of $0.167.
+
+One of the main strengths of this analysis is that we have accounted for the autocorrelation structure and the seasonal pattern in the errors of our regression models. In addition, our predictions are somewhat accurate given our very limited data. Our data are limited in two ways. First, we only have a little more than three years (39 months) of data. Given that we have decided to make prediction on an entire year, we only have 27 months to fit the model. Second, even though there are 13 variables in the avocado dataset, many of them are linear combinations of each other and are thus not usable in the model. For instance, the total sales volume is the sum of the sales volume of small, large, and extra large avocados. The additional macroeconmic measures unemployment rates and CPI turned out to be highly correlated.In future analysis, we hope to incorporate additional predictors, such as supply volume, import/export volume, tariff, weather to better inform our prediction.
+
+Beyond the limitation in our data, there is another important limitation with a regression model approach: if we want to make predictions about the future (instead of the known 04/2017-03/2018 time period), we would need data for the predictors in the future. The actual values are certainly not accessible, but we can potentially obtain plausible predictions. For instance, organizations such as the Federal Reserve releases their forecasts of marcoeconomic measures including the unemployment rate [@Unemployment_rate_projections]. We can use these prejections to predict the per-unit prices and subsequently use our predicted prices to forecast the sales volume.
+
+An interesting extension of this study would be to use the newly available 2018-2020 Kaggle avocados dataset to investigate the avocado retail sales before and during the pandemic. 2019 is a special year because earlier that year, tariffs and transportation-related delays contributed to avocado supply chain disruptions and consequently, unusually high prices [@Transportation_disruption;@Tariffs_disruption]. On the other hand, the avocado industry is remarkably resilient during the pandemic. It is said that the demand for avocados surged during the pandemic since people are paying more attention to their health and wellness, and more people are cooking at home [@Pandemic_proof]. In either case, the prediction problem would be more challenging since if we simply use the current approach, we would likely under-predict the price and/or the sales volume. 
+
+# Appendix
+
+## Using the \texttt{forecast} package
+When using the \texttt{Arima()} function, we can specify the non-seasonal component using the \texttt{order} argument, the seasonal component using the \texttt{seasonal} argument, and we can specify our predictors as a $n\times p$ matrix in the \texttt{xreg} argument where $n$ is the number of the observations and $p$ is the number of predictors.
+
+When using the \texttt{predict()} function, we can specify the values of the predictors during the forecast period in the \texttt{newxreg} argument as a $n' \times p$ matrix where now the value of $n'$ is 12 months as we are predicting the sales volumes in the last 12 months.
+
+## Supplementary Materials for Research Goal \texttt{\#}1: Predicting Sales Volume
+### OLS Model with Per-Unit Price, Unemployment Rate, and CPI as Predictors
+Model Formulation:
+$$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i + \beta_3 \ \text{CPI}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
+
+```{r}
+q1.lm0 = lm(Total.Volume.Million ~ Average.Price + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+
+vif.m0.names = rbind("Per-Unit Price", "Unemployment Rate", "CPI")
+vif.m0.values = rbind(round(vif(q1.lm0)[1], 3), round(vif(q1.lm0)[2], 3), round(vif(q1.lm0)[3], 3))
+vif.m0.table = data.frame(cbind(vif.m0.names, vif.m0.values))
+kable(vif.m0.table, caption = "First OLD Model VIF Outputs", col.names = cbind("Variable", "VIF Value"), align = c('l', 'r'))
+```
+
+The VIF values for all three predictors are all within the commonly acceptable range (i.e. less than 5) [@VIF_range]. However, according to the the correlation plot below, the unemployment rate seems to be highly negatively correlated with the CPI.
+
+```{r fig.height = 4, fig.width = 6, fig.cap="Unemployment Rate and CPI Highly Correlated"}
+corrplot.df = cbind("Per-Unit Price" = df_old.total.monthly.conventional.merged$Average.Price,
+      "Unemployment\nRate" = df_old.total.monthly.conventional.merged$Unemployment,
+      "CPI" = df_old.total.monthly.conventional.merged$CPI)
+corrplot(cor(corrplot.df), 
+         method = "number", 
+         type="upper", 
+         number.digits = 3,
+         mar=c(0,0,1,0),
+         tl.col = "black",
+         tl.pos = 'd',
+         tl.cex = 0.7,
+         number.cex = 0.8)
+```
+
+### OLS Model with Per-Unit Price and Unemployment Rate as Predictors
+Model Formulation:
+$$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
+```{r}
+q1.lm1 = lm(Total.Volume.Million ~ Average.Price + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+
+vif.m1.names = rbind("Per-Unit Price", "Unemployment Rate")
+vif.m1.values = rbind(round(vif(q1.lm1)[1], 3), round(vif(q1.lm1)[2], 3))
+vif.m1.table = data.frame(cbind(vif.m1.names, vif.m1.values))
+kable(vif.m1.table, caption = "Updated Model VIF Outputs", col.names = cbind("Variable", "VIF Value"), align = c('l', 'r'))
+```
+
+The VIF values per-unit price and unemployment rate are still small in this updated model. Furthermore, the magnitude of the correlation between the two predictors is 0.523 < 0.7, suggesting no severe multicollinearity [@Common_cutoff].
+
+One of the commonly used visualization tool for a time series is the decomposition plot. The decomposition plot is constructed based on the decomposition model, which reduces a time series into three components: trend, seasonal effects, and random errors [@Decomposition].
+
+An additive decomposition model for a time series $x_t$ can be represented as $$x_t = m_t + s_t + e_t$$ where at time $t$, $m_t$ is the trend, $s_t$ is the seasonal effect, and $e_t$ if a random error assumed to have a mean of zero and correlated over time [@Decomposition].
+
+Below, we use the \texttt{decompose()} function in R to compute and plot the seasonal effects. According to the function description, the seasonal effects are computed by "averaging, for each time unit, over all periods" [@decompose_function]. 
+
+```{r fig.height = 3, fig.width = 6.5, fig.cap="Seasonal Panel of Decomposition Plot"}
+q1.lm1.residuals <- ts(residuals(q1.lm1), frequency = 12)
+plot(decompose(q1.lm1.residuals)$seasonal,
+     xlab = "Months",
+     ylab = "Seasonal Effects",
+     xaxt="n",
+     main = "Residuals Show Seasonal Patterns",
+     cex.main=0.85,
+     cex.axis=0.8,
+     cex.lab=0.8)
+axis(1, at = 1:12, labels = c('01/2015', '01/2016', '01/2017', '01/2018', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+```
+
+We observe a seasonal pattern repeated annually according to Figure?.
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Times Series, ACF, and PACF Plots of Residuals"}
+ggtsdisplay(q1.lm1.residuals, points = FALSE, lag.max = 39,
+            main = "Times Series, ACF, and PACF Plots of Residuals",
+            ylab = "Residuals")
+```
+According to the ACF and PACF plots, there seems to be evidence of autocorrelation in the residuals.
+
+### Parameter Selection for the SARIMA Process
+Referring back to the ACF plot in Figure ?, we observe a pattern similar to a sinusoidal oscillation in the ACF plot, which is suggestive of a seasonal component and an autoregressive structure [@Sinusoidal_oscillation]. We also notice the spikes at lag 12 and 24. Thus, we would like to check if we should use seasonal differencing.
+
+We first fit two regressions with SARIMA errors $(0, 0, 0) \times (0, 0, 0)_{12}$ and $(0, 0, 0) \times (0, 1, 0)_{12}$, respectively. We fit these models using total sales volume as the response variable, per-unit price and unemployment as the predictors, and the data from January 2015 to March 2017.
+
+```{r}
+q1.sarima.000.000 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,0,0), period=12))
+q1.sarima.000.010 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,0), period=12))
+
+q1.D.table = cbind(c(0, 0), c(0, 0), c(0, 0), c(0, 0), c(0, 1), c(0, 0), 
+      c(q1.sarima.000.000$aic, q1.sarima.000.010$aic), 
+      c(q1.sarima.000.000$aicc, q1.sarima.000.010$aicc), 
+      c(q1.sarima.000.000$bic, q1.sarima.000.010$bic))
+
+kable(q1.D.table, digits = 3, caption = "Comparing Models", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
+```
+
+As shown in Table ?, adding the seasoning differencing greatly reduces the AIC, AICc, and BIC values. AIC (Akaike Information Criterion), AICc (corrected Akaike Information Criterion), and BIC (Schwarz's Bayesian Information Criterion) are both commonly used model selection criteria. Compared to AIC, BIC tends to favor more parsimonious models [@BIC_vs_AIC], while AICc is said to be preferred when the sample size is small [@AICc_sample_size]. In this case, all three criteria agree. Thus, we proceed with model with a seasonal difference (i.e. $D = 1$).
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Times Series, ACF, and PACF Plots of Residuals"}
+ggtsdisplay(q1.sarima.000.010$residuals, points = FALSE, lag.max = 27,
+            main = "Times Series, ACF, and PACF Plots of ARIMA(0,0,0)(0,1,0)[12] Residuals")
+```
+We check the residuals of the regression with ARIMA(0,0,0)(0,1,0)[12] errors. Ideally, these residuals should resemble white noise. For a white noise series, we usually expect 95% of the spikes in the ACF to lie within $\pm\frac{2}{\sqrt{T}}$, where $T$ is the length of the time series [@White_noise_ACF]. The blue dashed lines represent these bounds, in this case $\pm\frac{2}{\sqrt{27}} \approx \pm 0.385$. However, observing the ACF and PACF plots in Figure ?, there still seem to be AR or MA structures in the residuals.
+
+Thus, we would like to first check for AR or MA structures in the seasonal component. We fit two additional regressions with SARIMA errors $(0, 0, 0) \times (1, 1, 0)_{12}$ and $(0, 0, 0) \times (0, 1, 1)_{12}$, respectively.
+
+```{r}
+q1.sarima.000.110 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML")
+q1.sarima.000.011 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML")
+
+q1.PQ.table = cbind(c(0, 0, 0), c(0, 0, 0), c(0, 0, 0), c(0, 1, 0), c(1, 1, 1), c(0, 0, 1), 
+      c(q1.sarima.000.010$aic, q1.sarima.000.110$aic, q1.sarima.000.011$aic), 
+      c(q1.sarima.000.010$aicc, q1.sarima.000.110$aicc, q1.sarima.000.011$aicc), 
+      c(q1.sarima.000.010$bic, q1.sarima.000.110$bic, q1.sarima.000.011$bic))
+
+kable(q1.PQ.table, digits = 3, caption = "Comparing Models", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
+```
+
+In this case, according to Table?, the criteria values for the three models are relatively similar, with the $(0, 0, 0) \times (1, 1, 0)_{12}$ model having slightly smaller values compared to the other two models.
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Times Series, ACF, and PACF Plots of Residuals"}
+ggtsdisplay(q1.sarima.000.110$residuals, points = FALSE, lag.max = 27,
+            main = "Times Series, ACF, and PACF Plots of ARIMA(0,0,0)(1,1,0)[12] Residuals")
+```
+
+The residual plots of the three models are very similar. Here, we included the residual plots of the regression with ARIMA(0,0,0)(1,1,0)[12] errors in Figure ? for reference. We notice that even after accounting for seasonal AR or MA components, there still seem to be autocorrelation in the residuals. Specifically, we observe a spike at lag 1 that exceeds the dashed blue line in the PACF plots with $P = 0$ [Figure ?] or $P = 1$ [Figure ?]. This suggests a possible non-seasonal AR(1) component (i.e. $p = 1$) [@PACF_lag_1].
+
+As a next step, we would like to fit three additional regressions with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$, $(1, 0, 0) \times (1, 1, 0)_{12}$ and $(1, 0, 0) \times (0, 1, 1)_{12}$, respectively. 
+
+```{r}
+q1.sarima.100.010 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML")
+q1.sarima.100.110 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML")
+q1.sarima.100.011 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML")
+
+
+q1.p.table = cbind(c(1, 1, 1), c(0, 0, 0), c(0, 0, 0), c(0, 1, 0), c(1, 1, 1), c(0, 0, 1), 
+      c(q1.sarima.100.010$aic, q1.sarima.100.110$aic, q1.sarima.100.011$aic), 
+      c(q1.sarima.100.010$aicc, q1.sarima.100.110$aicc, q1.sarima.100.011$aicc), 
+      c(q1.sarima.100.010$bic, q1.sarima.100.110$bic, q1.sarima.100.011$bic))
+
+kable(q1.p.table, digits = 3, caption = "Comparing Models", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
+```
+
+According to Table ?, the criteria values for the three models are all much lower than before. The values are very similar, with the $(1, 0, 0) \times (0, 1, 0)_{12}$ model having slightly smaller values compared to the other two models.
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Times Series, ACF, and PACF Plots of Residuals"}
+ggtsdisplay(q1.sarima.100.010$residuals, points = FALSE, lag.max = 27,
+            main = "Times Series, ACF, and PACF Plots of ARIMA(1,0,0)(0,1,0)[12] Residuals")
+```
+
+We examine the residual plots of the regression with ARIMA(1,0,0)(0,1,0)[12] errors in Figure ?. This time, the residuals indeed seem like white noise. We feel comfortable proceeding with this model.
+
+
+### Model Assumptions
+As shown in Figure?, the plot in the upper panel is the residuals vs. time plot. The first 12 residuals seem to be 0; this is due to the 12-month seasonal differencing in the seasonal component of the SARIMA model. The rest of the residuals roughly have a mean of zero and constant variance as the residuals as mostly between -1 and 1. The ACF plot of the residuals show that the autocorrelation of the residuals are very close to zero (between -0.2 and 0.2), suggesting that the residuals are not very correlated. We observe that all the spikes in the ACF are between the blue dashed lines, suggesting no severe autocorrelation.Lastly, the residuals seem to be roughly normally distributed. Again, the spike of residuals at 0 are due to the seasonal differencing. We conclude that our selected SARIMA model for the error terms $(1, 0, 0) \times (0, 1, 0)_{12}$ satisfies all the model assumptions [@SARIMA_assumptions].
+
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
+checkresiduals(q1.sarima, test = F)
+```
+
+
+# Bibliography
