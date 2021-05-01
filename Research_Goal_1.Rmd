@@ -305,13 +305,63 @@ summary(q1.v0)
 
 
 ```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
-q1.v1 <- Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(2,0,0), seasonal = list(order = c(0,1,2), period = 12))
+q1.v1 <- arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(2,0,0), seasonal = list(order = c(0,1,2), period = 12))
 q1.v1.pred <- predict(q1.v1, newxreg=q1.covariates.mat[28:39],  n.ahead=12)
+summary(q1.v1)
+
+```
+```{r}
+q1.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Average.Price']],
+             df_old.total.monthly.conventional.merged[['Unemployment']])
+             # df_old.total.monthly.conventional.merged[['CPI']])
+```
+
+
+```{r}
+library(tsibble)
+# tsibble(df_old.total.monthly.conventional.merged)
+
+a_new_tsibble = df_old.total.monthly.conventional.merged %>%
+  mutate(Month = yearmonth(Year.Month)) %>%
+  as_tsibble(index = Month)
 ```
 
 ```{r}
+class(df_old.total.monthly.conventional.merged)
+```
+
+```{r}
+a_new_tsibble[1:27,]
+```
+
+
+```{r}
+output = a_new_tsibble[1:27,] %>%
+  as_tsibble() %>%
+  model(arima.0 = ARIMA(Total.Volume.Million ~ Average.Price + Unemployment + pdq(1, 0, 0) + PDQ(0, 1, 0))) %>%
+  report()
+```
+
+
+
+```{r}
+a_new_tsibble[1:27,] %>%
+  as_tsibble() %>%
+  model(arima = ARIMA(Total.Volume.Million ~ Average.Price + Unemployment + pdq(1, 0, 0) + PDQ(0, 1, 0))) %>%
+  # report()
+  forecast(a_new_tsibble[28:39,]) %>% 
+  autoplot(a_new_tsibble)
+
+# forecast(fit, vic_elec_future) %>%
+#   autoplot(vic_elec_daily)
+```
+
+```{r}
+q1.v1 <- Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), include.drift = T, method = "ML", period = 12))
+# q1.v1.pred <- predict(q1.v1, newxreg=q1.covariates.mat[28:39],  n.ahead=12)
 summary(q1.v1)
 ```
+
 
 
 ```{r}
