@@ -129,11 +129,14 @@ ggtsdisplay(q2.m4.2$residuals, points = FALSE, lag.max = 27)
 ggtsdisplay(q2.m4.3$residuals, points = FALSE, lag.max = 27)
 ```
 
-
+```{r}
+q2.0.1.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Total.Volume.Million']],
+             df_old.total.monthly.conventional.merged[['Unemployment']])
+```
 
 ```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
-q2.sarima0 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,0, 1), period = 12, method="ML"))
-q2.sarima0.pred <- predict(q2.sarima0, newxreg=q2.0.covariates.mat[28:39],  n.ahead=12)
+q2.sarima0 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12, method="ML"))
+q2.sarima0.pred <- predict(q2.sarima0, newxreg=q2.0.1.covariates.mat[28:39],  n.ahead=12)
 ```
 
 ```{r}
@@ -145,8 +148,8 @@ matplot(1:12, cbind(old_monthly_conventional_price[28:39], q2.sarima0.pred$pred)
 
 
 ```{r fig.height = 3.5, fig.width = 7.2, fig.cap="Predicting the Weekly Per-Unit Conventional Avocado Prices from 2017-2018"}
-q2.sarima1 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order = c(0,1,2), period = 12, method="ML"))
-q2.sarima1.pred <- predict(q2.sarima1, newxreg=q2.0.covariates.mat[28:39],  n.ahead=12)
+q2.sarima1 <- Arima(old_monthly_conventional_price[1:27], xreg=q2.0.1.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order = c(0,1,2), period = 12, method="ML"))
+q2.sarima1.pred <- predict(q2.sarima1, newxreg=q2.0.1.covariates.mat[28:39],  n.ahead=12)
 ```
 
 ```{r}

@@ -37,7 +37,7 @@ df_old = read.csv('avocado.csv')
 
 df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
 df_old$Month = month(df_old$Date)
-df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old$Year.Month = format(as.Date(df_old$Date), "%Y-%m")
 df_old = df_old[order(df_old$Date), ]
 
 df_old = df_old %>%
@@ -57,7 +57,7 @@ df_old = df_old %>%
 # https://stackoverflow.com/questions/22603847/how-to-extract-month-from-date-in-r
 df_old$Date = as.Date(df_old$Date, "%Y-%m-%d")
 df_old$Month = month(df_old$Date)
-df_old$Year.Month <- format(as.Date(df_old$Date), "%Y-%m")
+df_old$Year.Month = format(as.Date(df_old$Date), "%Y-%m")
 df_old = df_old[order(df_old$Date), ]
 ```
 
@@ -198,7 +198,7 @@ axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2
 
 Actually, the patterns we observe in Figure ? is somewhat expected since we are analyzing time series data. A time series is a sequence of values taken at successive equally spaced points in time [@Time_series_definition]. In this case, the time period is a month. When we use regression to model time series data, the error terms are often autocorrelated [@ARIMA_errors_traffic_study]. In addition to observing the residual plots, we typically use the Autocorrelation Function (ACF) plots and the Partial Autocorrelation Function (PACF) plots to detect autocorrelation in the residuals [@ACF_PACF]. We can take autocorrelation into account by adding structures such as autoregression (AR), moving average (MA), and/or using techniques such as differencing.
 
-After examining the ACF and PACF plots [Appendix ? Figure ?], we realized that the patterns we observe in the Figure ? might be evidence of AR or MA structures. In addition, the decomposition plot of the residuals [Appendix ? Figure ?] show seasonal patterns, suggesting that we might need to incorporate seasonal differencing. To account for these structures, we choose to use a regression with Seasonal Autoregressive Integrated Moving Average (SARIMA) errors [@ARIMA_errors_traffic_study; @Regression_with_ARIMA_errors_penn; @Regression_with_ARIMA_errors_Hyndman].
+After examining the ACF and PACF plots [Appendix ? Figure ?], we realized that the patterns we observe in the Figure ? might be evidence of AR or MA structures. In addition, the decomposition plot of the residuals [Appendix ? Figure ?] show potential seasonal patterns, suggesting that we might need to incorporate seasonal differencing. To account for these structures, we choose to use a regression with Seasonal Autoregressive Integrated Moving Average (SARIMA) errors [@ARIMA_errors_traffic_study; @Regression_with_ARIMA_errors_penn; @Regression_with_ARIMA_errors_Hyndman].
 
 ### Regression with SARIMA Errors
 
@@ -210,11 +210,12 @@ The $n_i$, or the errors of the regression, is modeled by SARIMA. SARIMA models 
 
 Thus, we can express the error terms as follows:
 
-$$n_i = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_i$$ where $\phi$ is the autoregression parameter, $a_i$ is assumed to be white noise [@ARIMA_errors_traffic_study], and $L$ is the lag operator (i.e. $L^k\ y_t = y_{t-k}$) [@Lag_operator].
+$$n_i = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_i$$ where $\phi_1$ is the autoregression parameter, $a_i$ is assumed to be white noise [@ARIMA_errors_traffic_study], and $L$ is the lag operator (i.e. $L^k\ y_t = y_{t-k}$) [@Lag_operator].
 
 The main assumption to check for a SARIMA model is that the residuals indeed follows a white noise process. Specifically, this means that the residuals should largely have a mean of zero, have constant variance and also be uncorrelated [@SARIMA_assumptions]. As shown in Figure?, these assumptions all seem to be satisfied.
 
 We used the \texttt{Arima()} function in the R \texttt{forecast} to fit this regression model with SARIMA errors and the \texttt{predict()} function to make the forecast. Further details are included in Appendix ?. The data from January 2015 to February 2017 are used to fit the model, while the forecast is made from April 2017 to March 2018.
+
 
 ## Results
 ```{r fig.height = 4, fig.width = 5.5, fig.cap="Predicting the Monthly Avocado Sales Volume from 2017-2018"}
@@ -224,8 +225,8 @@ old_monthly_conventional_volume = ts(df_old.total.monthly.conventional.merged$To
 q1.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Average.Price']],
              df_old.total.monthly.conventional.merged[['Unemployment']])
 
-q1.sarima <- Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
-q1.sarima.pred <- predict(q1.sarima, newxreg=q1.covariates.mat[28:39],  n.ahead=12)
+q1.sarima = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
+q1.sarima.pred = predict(q1.sarima, newxreg=q1.covariates.mat[28:39],  n.ahead=12)
 
 # par(cex=0.7, mfrow=c(2,1))
 # par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
@@ -250,10 +251,12 @@ axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/20
 legend("bottomleft", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
 # abline(v=c(10, 20, 35, 48), col=c("grey", "grey", "grey", "grey"), lty=c(3, 3, 3, 3), lwd=c(1, 1, 1, 1))
 
-# q1.sarima.forecast <- forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
+# q1.sarima.forecast = forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
 # {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
 # lines(ts(old_monthly_conventional_volume))}
 ```
+
+
 
 ```{r}
 q1.names = rbind("Sales Volume Prediction", "Sales Volume from Previous Year")
@@ -303,7 +306,7 @@ As discussed in Section 2, we observed a high magnitude of correlation between u
 
 We specify the OLS model as follows:
 
-$$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$
+$$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$
 
 We note that some assumptions of this OLS model are still violated. For instance, the residuals seem to have a non-constant variance [Figure 2(a)] and also seem to be correlated over time, or autocorrelated [Figure 2(b)]. The decomposition plot [Appendix ?, Figure ?], shows potential seasonal patterns, and the ACF and PACF plots [Appendix ?, Figure ?] show evidence of autocorrelation.
 
@@ -345,8 +348,8 @@ old_monthly_conventional_price = ts(df_old.total.monthly.conventional.merged$Ave
 
 q2.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Unemployment']])
 
-q2.sarima <- Arima(old_monthly_conventional_price[1:27], xreg=q2.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
-q2.sarima.pred <- predict(q2.sarima, newxreg=q2.covariates.mat[28:39],  n.ahead=12)
+q2.sarima = Arima(old_monthly_conventional_price[1:27], xreg=q2.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order = c(0,1,0), period = 12))
+q2.sarima.pred = predict(q2.sarima, newxreg=q2.covariates.mat[28:39],  n.ahead=12)
 
 # par(cex=0.7, mfrow=c(2,1))
 # par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
@@ -370,7 +373,7 @@ matplot(1:12,
 axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
 legend("topright", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
 
-# q1.sarima.forecast <- forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
+# q1.sarima.forecast = forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
 # {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
 # lines(ts(old_monthly_conventional_volume))}
 ```
@@ -415,6 +418,7 @@ When using the \texttt{Arima()} function, we can specify the non-seasonal compon
 When using the \texttt{predict()} function, we can specify the values of the predictors during the forecast period in the \texttt{newxreg} argument as a $n' \times p$ matrix where now the value of $n'$ is 12 months as we are predicting the sales volumes in the last 12 months.
 
 ## Supplementary Materials for Research Goal \texttt{\#}1: Predicting Sales Volume
+
 ### OLS Model with Per-Unit Price, Unemployment Rate, and CPI as Predictors
 Model Formulation:
 $$\text{Total Volume}_i = \beta_0 + \beta_1 \ \text{Per-Unit Price}_i + \beta_2 \ \text{Unemployment Rate}_i + \beta_3 \ \text{CPI}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
@@ -425,7 +429,7 @@ q1.lm0 = lm(Total.Volume.Million ~ Average.Price + Unemployment + CPI, data = df
 vif.m0.names = rbind("Per-Unit Price", "Unemployment Rate", "CPI")
 vif.m0.values = rbind(round(vif(q1.lm0)[1], 3), round(vif(q1.lm0)[2], 3), round(vif(q1.lm0)[3], 3))
 vif.m0.table = data.frame(cbind(vif.m0.names, vif.m0.values))
-kable(vif.m0.table, caption = "First OLD Model VIF Outputs", col.names = cbind("Variable", "VIF Value"), align = c('l', 'r'))
+kable(vif.m0.table, caption = "First OLS Model VIF Outputs", col.names = cbind("Variable", "VIF Value"), align = c('l', 'r'))
 ```
 
 The VIF values for all three predictors are all within the commonly acceptable range (i.e. less than 5) [@VIF_range]. However, according to the the correlation plot below, the unemployment rate seems to be highly negatively correlated with the CPI.
@@ -466,12 +470,12 @@ An additive decomposition model for a time series $x_t$ can be represented as $$
 Below, we use the \texttt{decompose()} function in R to compute and plot the seasonal effects. According to the function description, the seasonal effects are computed by "averaging, for each time unit, over all periods" [@decompose_function]. 
 
 ```{r fig.height = 3, fig.width = 6.5, fig.cap="Seasonal Panel of Decomposition Plot"}
-q1.lm1.residuals <- ts(residuals(q1.lm1), frequency = 12)
+q1.lm1.residuals = ts(residuals(q1.lm1), frequency = 12)
 plot(decompose(q1.lm1.residuals)$seasonal,
      xlab = "Months",
      ylab = "Seasonal Effects",
      xaxt="n",
-     main = "Residuals Show Seasonal Patterns",
+     main = "Residuals Show Potential Seasonal Patterns",
      cex.main=0.85,
      cex.axis=0.8,
      cex.lab=0.8)
@@ -537,6 +541,7 @@ The residual plots of the three models are very similar. Here, we included the r
 
 As a next step, we would like to fit three additional regressions with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$, $(1, 0, 0) \times (1, 1, 0)_{12}$ and $(1, 0, 0) \times (0, 1, 1)_{12}$, respectively. 
 
+
 ```{r}
 q1.sarima.100.010 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML")
 q1.sarima.100.110 = Arima(old_monthly_conventional_volume[1:27], xreg=q1.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML")
@@ -560,14 +565,192 @@ ggtsdisplay(q1.sarima.100.010$residuals, points = FALSE, lag.max = 27,
 
 We examine the residual plots of the regression with ARIMA(1,0,0)(0,1,0)[12] errors in Figure ?. This time, the residuals indeed seem like white noise. We feel comfortable proceeding with this model.
 
-
 ### Model Assumptions
-As shown in Figure?, the plot in the upper panel is the residuals vs. time plot. The first 12 residuals seem to be 0; this is due to the 12-month seasonal differencing in the seasonal component of the SARIMA model. The rest of the residuals roughly have a mean of zero and constant variance as the residuals as mostly between -1 and 1. The ACF plot of the residuals show that the autocorrelation of the residuals are very close to zero (between -0.2 and 0.2), suggesting that the residuals are not very correlated. We observe that all the spikes in the ACF are between the blue dashed lines, suggesting no severe autocorrelation.Lastly, the residuals seem to be roughly normally distributed. Again, the spike of residuals at 0 are due to the seasonal differencing. We conclude that our selected SARIMA model for the error terms $(1, 0, 0) \times (0, 1, 0)_{12}$ satisfies all the model assumptions [@SARIMA_assumptions].
+As shown in Figure?, the plot in the upper panel is the residuals vs. time plot. The first 12 residuals seem to be 0; this is due to the 12-month seasonal differencing in the seasonal component of the SARIMA model. The rest of the residuals roughly have a mean of zero and constant variance as the residuals as mostly between -1 and 1. The ACF plot of the residuals show that the autocorrelation of the residuals are very close to zero (between -0.2 and 0.2), suggesting that the residuals are not very correlated. We observe that all the spikes in the ACF are between the blue dashed lines, suggesting no severe autocorrelation. Lastly, the residuals seem to be roughly normally distributed. Again, the spike of residuals at 0 are due to the seasonal differencing. We conclude that our selected SARIMA model for the error terms $(1, 0, 0) \times (0, 1, 0)_{12}$ satisfies all the model assumptions [@SARIMA_assumptions].
 
 
 ```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
 checkresiduals(q1.sarima, test = F)
 ```
+## Supplementary Materials for Research Goal \texttt{\#}2: Predicting Per-Unit Price
+
+### Sensitivity Analysis with Sales Volume as a Predictor
+
+
+```{r}
+q2.sa.lm0 = lm(Average.Price ~ Total.Volume.Million + Unemployment + CPI, data = df_old.total.monthly.conventional.merged)
+# summary(q2.sa.lm0)
+# vif(q2.sa.lm0)
+
+q2.sa.lm1 = lm(Average.Price ~ Total.Volume.Million + CPI, data = df_old.total.monthly.conventional.merged)
+# summary(q2.sa.lm1)
+# vif(q2.sa.lm1)
+
+q2.sa.lm2 = lm(Average.Price ~ Total.Volume.Million + Unemployment, data = df_old.total.monthly.conventional.merged)
+# summary(q2.sa.lm2)
+# vif(q2.sa.lm2)
+```
+
+
+As mentioned in Section 3.1, we would like to potentially use the sales volume as a proxy for demand to predict the per-unit price. The other possible predictors are unemployment rate and CPI. As previously showed, the variables unemployment rate and CPI are highly negatively correlated. To address this potential multicollinearity, we compared the model outputs of the full model with two other models with either unemployment rate or CPI removed. Similarly to our observation in Section 2.2.1, after we remove CPI from the model, the estimated coefficient changed from a positive value (0.113) to a negative value (-0.159). Its corresponding p-value also decreases from 0.033 a value less than 0.001. Since we observe a potential negative association between per-unit price and unemployment rate, the outputs of the updated model seem to meet our expectation that higher prices are associated with lower unemployment rates. Thus, we decided to try to remove CPI and proceed with the following model.
+
+$$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \text{Total Volume}_i + \beta_2 \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \sim \mathcal{N}(0, \sigma^2)$$ 
+
+As we check for OLS model assumptions, we once again noticed some patterns in the residual plots. In Figure ?a, we noticed a fanning pattern in the residuals vs. fitted values plot, suggesting potential heteroscedasticity. On the other hand, in Figure ?b, the residuals seem to be correlated over time.
+
+```{r fig.height = 3.5, fig.width = 8, fig.cap="(a) Residuals vs. Fitted Values Plot and (b) Residuals vs. Time Plot"}
+# https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+par(cex=0.7, mfrow=c(1,2))
+plot(fitted.values(q2.sa.lm2), residuals(q2.sa.lm2), xlab = "Fitted Values", ylab = "Residuals", 
+main = "(a) Potential Heteroscedasticity in\nResiduals vs. Fitted Values plot", cex.main=0.85)
+abline(h=0, col="red")
+
+plot(residuals(q2.sa.lm2), type = "b", xlab = "Months", ylab = "Residuals", xaxt="n", 
+main = "(b) Potential Seasonal Patterns in\nResiduals vs. Time plot", cex.main=0.85)
+axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2018'))
+```
+
+To further investigate these patterns in the residuals, we use the \texttt{decompose()} function in R to compute and plot the seasonal effects. As presented in Figure ?, there seems to be a seasonal pattern that is repeated yearly.
+
+```{r fig.height = 3, fig.width = 6.5, fig.cap="Seasonal Panel of Decomposition Plot"}
+q2.sa.lm2.residuals = ts(residuals(q2.sa.lm2), frequency = 12)
+plot(decompose(q2.sa.lm2.residuals)$seasonal,
+     xlab = "Months",
+     ylab = "Seasonal Effects",
+     xaxt="n",
+     main = "Residuals Show Potential Seasonal Patterns",
+     cex.main=0.85,
+     cex.axis=0.8,
+     cex.lab=0.8)
+axis(1, at = 1:12, labels = c('01/2015', '01/2016', '01/2017', '01/2018', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+```
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Times Series, ACF, and PACF Plots of Residuals"}
+ggtsdisplay(q2.sa.lm2.residuals, points = FALSE, lag.max = 39,
+            main = "Times Series, ACF, and PACF Plots of Residuals",
+            ylab = "Residuals")
+```
+The ACF and PACF plots show slight evidence of autocorrelation in the residuals. Specifically, the lag 1 autocorrelation and partial autocorrelation both exceed the dashed blue line. There also seems to exist a pattern similar to a sinusoidal oscillation in the ACF plot, suggesting potential seasonal components and/or an autoregressive structure [@Sinusoidal_oscillation].
+
+```{r}
+q2.sa.covariates.mat = cbind(df_old.total.monthly.conventional.merged[['Total.Volume.Million']],
+                             df_old.total.monthly.conventional.merged[['Unemployment']])
+```
+
+```{r}
+q2.sa.sarima.000.010 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(0,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML")
+
+q2.sa.sarima.100.010 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,0), period=12), method="ML")
+q2.sa.sarima.100.110 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(1,1,0), period=12), method="ML")
+q2.sa.sarima.100.011 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,0,0), seasonal = list(order=c(0,1,1), period=12), method="ML")
+
+q2.sa.sarima.110.010 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,0), period=12), method="ML")
+q2.sa.sarima.110.110 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(1,1,0), period=12), method="ML")
+q2.sa.sarima.110.011 = Arima(old_monthly_conventional_price[1:27], xreg=q2.sa.covariates.mat[1:27], order = c(1,1,0), seasonal = list(order=c(0,1,1), period=12), method="ML")
+
+q2.sa.table = cbind(c(0, 1, 1, 1, 1, 1, 1), 
+                    c(0, 0, 0, 0, 1, 1, 1), 
+                    c(0, 0, 0, 0, 0, 0, 0), 
+                    c(0, 0, 1, 0, 0, 1, 0), 
+                    c(1, 1, 1, 1, 1, 1, 1), 
+                    c(0, 0, 0, 1, 0, 0, 1),
+                    c(q2.sa.sarima.000.010$aic, 
+                      q2.sa.sarima.100.010$aic, q2.sa.sarima.100.110$aic, q2.sa.sarima.100.011$aic,
+                      q2.sa.sarima.110.010$aic, q2.sa.sarima.110.110$aic, q2.sa.sarima.110.011$aic),
+                    c(q2.sa.sarima.000.010$aicc, 
+                      q2.sa.sarima.100.010$aicc, q2.sa.sarima.100.110$aicc, q2.sa.sarima.100.011$aicc,
+                      q2.sa.sarima.110.010$aicc, q2.sa.sarima.110.110$aicc, q2.sa.sarima.110.011$aicc),
+                    c(q2.sa.sarima.000.010$bic, 
+                      q2.sa.sarima.100.010$bic, q2.sa.sarima.100.110$bic, q2.sa.sarima.100.011$bic,
+                      q2.sa.sarima.110.010$bic, q2.sa.sarima.110.110$bic, q2.sa.sarima.110.011$bic))
+
+kable(q2.sa.table, digits = 3, caption = "Comparing Models", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
+```
+
+
+Here we follow a similar parameter selection procedure as detailed in Section 5.2.3. The selected models and their corresponding model selection criterion values are shown in Table ?. Interestingly, the AIC, AICc, and BIC values for these models are very similar (except for the first model). The two models with comparatively smaller criterion values are regression models with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ and $(1, 0, 0) \times (1, 1, 0)_{12}$. We attempt both and compare their prediction results.
+
+```{r fig.height = 3.5, fig.width = 7.5, fig.cap="Predicting Avocado Per-Unit Price from 2017-2018"}
+q2.sa.sarima.100.010.pred = predict(q2.sa.sarima.100.010, newxreg=q2.sa.covariates.mat[28:39],  n.ahead=12)
+q2.sa.sarima.100.110.pred = predict(q2.sa.sarima.100.110, newxreg=q2.sa.covariates.mat[28:39],  n.ahead=12)
+
+# par(cex=0.7, mfrow=c(2,1))
+# par(mai=c(0.8,0.5,0.8,0.2)) # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
+# hide tick marks: http://www.sthda.com/english/wiki/add-custom-tick-mark-labels-to-a-plot-in-r-software#hide-tick-marks
+# add self-defined tick mark labels: https://stat.ethz.ch/pipermail/r-help/2008-March/158056.html
+# legend: https://stackoverflow.com/questions/27796583/how-to-add-colour-matched-legend-to-a-r-matplot
+# font size: https://www.dummies.com/programming/r/how-to-change-plot-options-in-r/
+
+par(cex=0.7, mfrow=c(1,2))
+par(mai=c(0.8,0.5,0.8,0.2))
+matplot(1:12, 
+        cbind(old_monthly_conventional_price[28:39], 
+              q2.sa.sarima.100.010.pred$pred, 
+              old_monthly_conventional_price[16:27]), 
+        type = "l", 
+        xlab = "Months (04/2017-03/2018)", 
+        ylab = "Per-Unit Price ($)", 
+        xaxt="n",
+        main = "(a) One-Year Per-Unit Price Prediction\nARIMA(1,0,0)(0,1,0)[12]",
+        cex.main=0.85,
+        cex.axis=0.8,
+        cex.lab=0.8)
+axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+legend("topright", legend = c("Actual", "Predicted\n(1,0,0)(0,1,0)[12]", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
+
+matplot(1:12, 
+        cbind(old_monthly_conventional_price[28:39], 
+              q2.sa.sarima.100.110.pred$pred, 
+              old_monthly_conventional_price[16:27]), 
+        type = "l", 
+        xlab = "Months (04/2017-03/2018)", 
+        ylab = "Per-Unit Price ($)", 
+        xaxt="n",
+        main = "(b) One-Year Per-Unit Price Prediction\nARIMA(1,0,0)(1,1,0)[12]",
+        cex.main=0.85,
+        cex.axis=0.8,
+        cex.lab=0.8)
+axis(1, at = 1:12, labels = c('04/2017', '05/2017', '06/2017', '07/2017', '08/2017', '09/2017', '10/2017', '11/2017', '12/2017', '01/2018', '02/2018', '03/2018'), cex.axis=0.8, cex.lab=0.8)
+legend("topright", legend = c("Actual", "Predicted\n(1,0,0)(1,1,0)[12]", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
+
+# q1.sarima.forecast = forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
+# {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
+# lines(ts(old_monthly_conventional_volume))}
+```
+
+We notice that the prediction made by the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ [Figure ?(b)] seems to be closer to the actual values than that made by regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ [Figure ?(a)]. Specifically, the prediction shown in Figure ?(a) seem to always under-predict the per-unit price. Nonetheless, the two predictions seem to be very similar, and both seem to be much closer to the actual values than simply using the last year's results. 
+
+```{r}
+q2.sa.names = rbind("Per-Unit Price Prediction (1,0,0)(0,1,0)[12]", 
+                 "Per-Unit Price Prediction (1,0,0)(1,1,0)[12]",
+                 "Per-Unit Price from Previous Year")
+q2.sa.values = rbind(round(accuracy(object = q2.sa.sarima.100.010.pred$pred, x = old_monthly_conventional_price[28:39])[,2],3),
+                     round(accuracy(object = q2.sa.sarima.100.110.pred$pred, x = old_monthly_conventional_price[28:39])[,2],3),
+                     round(accuracy(object = old_monthly_conventional_price[16:27], x = old_monthly_conventional_price[28:39])[,2],3))
+
+q2.sa.table = data.frame(cbind(q2.sa.names, q2.sa.values))
+
+kable(q2.sa.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+```
+
+As shown in Table ?, the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ indeed seem to have the smallest RMSE value, though the RMSE value of the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ is very similar. Both of these models have lower RMSE values than the model in Section 3, which yields an RMSE value of 0.167. This suggests that some information about the volume or demand for avocados might potentially improve the prediction. As mentioned in Section 3.1, the problem with this approach is that we would not know the sales volume when we do not know the price. Thus, such a prediction might not be feasible in reality. However, if we have access to a plausible projection of the demand for avocados or the actual production volume data, we might use them to better predict the per-unit price.
+
+Now we check for model assumptions. In Figure ?, we see some of the residual plots for the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$. The corresponding residual plots for the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ are largely similar. In the upper panel of Figure ? is the residuals vs. time plot. Besides the first 12 residuals being 0 due to seasonal differencing, the remaining residuals seem to roughly have a mean of zero and constant variance. There seem to no severe autocorrelation among the residuals, since the spikes in the ACF plot are all between the blue dashed lines. In addition, the residuals seem to be largely normally distributed as shown in the bottom right plot. Thus, we conclude that the regression model with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ satisfies the model assumptions [@SARIMA_assumptions].
+
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
+checkresiduals(q2.sa.sarima.100.110, test = F)
+```
+
+### Model Assumptions for the Selected Model in Section 3
+We observe the residual plots for the regression with unemployment rate as the predictor and with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$. In the residuals vs. time plot, besides the first 12 residuals, the rest of the residuals seem to largely have a mean of zero. Interestingly, the variance of the residuals seem to increase slightly with time, although it is difficult to conclude whether this is a major concern given that we only have 27 months to fit the model. In the ACF plot, there seem to no severe autocorrelation as the spikes are all between the blue dashed lines. From the bottom right plot, the residuals seem to be largely normally distributed. Thus, the model seems to largely satisfy the SARIMA assumptions [@SARIMA_assumptions].
+
+
+```{r fig.height = 3.5, fig.width = 6.5, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
+checkresiduals(q2.sarima, test = F)
+```
+
+
 
 
 # Bibliography
