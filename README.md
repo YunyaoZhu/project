@@ -1,3 +1,8 @@
+# Notes
+1. The manuscript (submitted to Gradescope) is titled `Final_Report.pdf`. All writing and code used for the manuscript are included in `Final_Report.Rmd`.
+2. All other writing (i.e. earlier drafts) and code (i.e. experimental code) not included in the manuscript can be found in the `Ignore` folder. 
+3. The code snippets used for inspiration are cited in `Final_Report.Rmd`.
+
 # Instructions
 
 Note: this course is code-agnostic, **but will presume R**. If you use any other
