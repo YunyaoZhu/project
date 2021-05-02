@@ -209,7 +209,7 @@ where $n_t$, or the errors of the regression, is modeled by SARIMA. We use subsc
 
 We can express the error terms as follows:
 
-$$n_t = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_t$$ where $\phi_1$ is the non-seasonal order-1 autoregression parameter, $a_t$ is assumed to be white noise [@ARIMA_errors_traffic_study], and $L$ is the lag operator (i.e. $L^{k} \ n_t = n_{t-k}, \ k = 1, 2, ...$) [@Lag_operator]. It is worth noting that $n_t$ represents the errors with autocorrelation structures and $a_t$ represents the white noise residuals.
+$$(1-\phi_1 L)(1-L^{12})\ n_t = a_t, \: a_t \stackrel{i.i.d.}{\sim} \mathcal{N}(0, \sigma^2)$$ where $\phi_1$ is the non-seasonal order-1 autoregression parameter, $a_t$ is assumed to be white noise [@ARIMA_errors_traffic_study;@White_noise_definition], and $L$ is the lag operator (i.e. $L^{k} \ n_t = n_{t-k}, \ k = 1, 2, ...$) [@Lag_operator]. It is worth noting that $n_t$ represents the errors with autocorrelation structures and $a_t$ represents the white noise residuals.
 
 The main assumption for a SARIMA model is that its residuals indeed follows a white noise process. Specifically, the residuals should have a mean of zero, have largely constant variance and also be uncorrelated [@SARIMA_assumptions]. As shown in Figure 14, these assumptions all seem to be satisfied.
 
@@ -300,7 +300,7 @@ We specify the OLS model as follows:
 
 $$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \stackrel{i.i.d.}{\sim} \mathcal{N}(0, \sigma^2)$$
 
-We note that some assumptions of this model are still violated. For instance, the residuals seem to have a non-constant variance [Figure 5(a)] and also seem to be correlated over time [Figure 5(b)]. The decomposition plot [Appendix ?, Figure ?] shows potential seasonal patterns, and the ACF and PACF plots [Appendix ?, Figure ?] show evidence of autocorrelation.
+We note that some assumptions of this model are still violated. For instance, the residuals seem to have a non-constant variance [Figure 5(a)] and also seem to be correlated over time [Figure 5(b)]. The decomposition plot shows potential seasonal patterns, and the ACF and PACF plots show evidence of autocorrelation.
 
 ```{r fig.height = 3.5, fig.width = 8, fig.cap="(a) Residuals vs. Fitted Values Plot and (b) Residuals vs. Time Plot"}
 q2.lm.updated = lm(Average.Price ~ Unemployment, data = df_old.total.monthly.conventional.merged)
@@ -326,9 +326,9 @@ $$\text{Per-Unit Price}_t = \beta_0 + \beta_1 \ \text{Unemployment Rate}_t + n_t
 
 where the information remaining in the error terms are modeled by SARIMA $(1, 0, 0) \times (0, 1, 0)_{12}$. The values of $p, d, q$ and $P, D, Q$ are selected using the Box-Jenkins method [@ARIMA_Box_Jenkins]. Here, we use subscript $t$ to index an observation (i.e. at month $t$). We thus have:
 
-$$n_t = \frac{1}{(1-\phi_1 L)(1-L^{12})} \ a_t$$ where $\phi_1$ is non-seasonal order-1 autoregression parameter, $a_t$ is assumed to be white noise, and $L$ is the lag operator (i.e. $L^{k} \ n_t = n_{t-k}, \ k = 1, 2, ...$) [@Lag_operator].
+$$(1-\phi_1 L)(1-L^{12})\ n_t = a_t, \: a_t \stackrel{i.i.d.}{\sim} \mathcal{N}(0, \sigma^2)$$ where $\phi_1$ is non-seasonal order-1 autoregression parameter, $a_t$ is assumed to be white noise, and $L$ is the lag operator (i.e. $L^{k} \ n_t = n_{t-k}, \ k = 1, 2, ...$) [@Lag_operator].
 
-Figure ? in Appendix ? shows that our the residuals of our regression with SARIMA errors model largely follows a white noise process, satisfying the assumptions of zero mean and uncorrelated residuals [@SARIMA_assumptions].
+Figure 20 in Appendix 5.3.2 shows that our the residuals of our regression with SARIMA errors model largely follows a white noise process, satisfying the assumptions of zero mean and uncorrelated residuals [@SARIMA_assumptions].
 
 We note that the data from January 2015 to February 2017 are used to fit the model, while the forecast is made from April 2017 to March 2018.
 
@@ -504,14 +504,14 @@ q1.D.table = cbind(c(0, 0), c(0, 0), c(0, 0), c(0, 0), c(0, 1), c(0, 0),
 kable(q1.D.table, digits = 3, caption = "Lower Model Selection Criterion Values for SARIMA(0,0,0)(0,1,0)[12]", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
 ```
 
-As shown in Table 5, adding the seasoning differencing greatly reduces the AIC, AICc, and BIC values. AIC (Akaike Information Criterion), AICc (corrected Akaike Information Criterion), and BIC (Schwarz's Bayesian Information Criterion) are commonly used model selection criteria. Compared to AIC, BIC tends to favor more parsimonious models [@BIC_vs_AIC], while AICc is said to be preferred when the sample size is small [@AICc_sample_size]. In this case, all three criteria agree. Thus, we proceed with model with a seasonal difference (i.e. $D = 1$).
+As shown in Table 5, including a seasoning differencing greatly reduces the AIC, AICc, and BIC values. AIC (Akaike Information Criterion), AICc (corrected Akaike Information Criterion), and BIC (Schwarz's Bayesian Information Criterion) are commonly used model selection criteria. Compared to AIC, BIC tends to favor more parsimonious models [@BIC_vs_AIC], while AICc is said to be preferred when the sample size is small [@AICc_sample_size]. In this case, all three criteria agree. Thus, we proceed with the model with a seasonal difference (i.e. $D = 1$).
 
 ```{r fig.height = 3, fig.width = 6, fig.cap="Time Series, ACF, PACF Plots of Residuals"}
 ggtsdisplay(q1.sarima.000.010$residuals, points = FALSE, lag.max = 27,
             main = "Time Series, ACF, PACF Plots of SARIMA(0,0,0)(0,1,0)[12] Residuals")
 ```
 
-We check the residuals of the regression with ARIMA(0,0,0)(0,1,0)[12] errors. Ideally, these residuals should resemble white noise. For a white noise series, we usually expect the spikes in the ACF to roughly lie within $\pm\frac{2}{\sqrt{T}}$, where $T$ is the length of the time series [@White_noise_ACF]. The blue dashed lines represent these bounds, in this case $\pm\frac{2}{\sqrt{27}} \approx \pm 0.385$. However, observing the ACF and PACF plots in Figure 10, there still seem to be AR or MA structures in the residuals.
+We check the residuals of the regression with ARIMA(0,0,0)(0,1,0)[12] errors. Ideally, these residuals should resemble white noise. For a white noise series, we usually expect the spikes in the ACF and PACF plots to roughly lie within $\pm\frac{2}{\sqrt{T}}$, where $T$ is the length of the time series [@White_noise_ACF]. The blue dashed lines represent these bounds, in this case $\pm\frac{2}{\sqrt{27}} \approx \pm 0.385$. However, observing the ACF and PACF plots in Figure 10, there still seem to be AR or MA structures in the residuals.
 
 Thus, we would like to first check for AR or MA structures in the seasonal component. We fit two additional regressions with SARIMA errors $(0, 0, 0) \times (1, 1, 0)_{12}$ and $(0, 0, 0) \times (0, 1, 1)_{12}$, respectively.
 
@@ -527,14 +527,14 @@ q1.PQ.table = cbind(c(0, 0, 0), c(0, 0, 0), c(0, 0, 0), c(0, 1, 0), c(1, 1, 1), 
 kable(q1.PQ.table, digits = 3, caption = "Lowest Model Selection Criterion Values for SARIMA(0,0,0)(1,1,0)[12]", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
 ```
 
-In this case, according to Table 6, the criteria values for the three models are relatively similar, with the $(0, 0, 0) \times (1, 1, 0)_{12}$ model having slightly smaller values compared to the other two models.
+In this case, according to Table 6, the criterion values for the three models are relatively similar, with the $(0, 0, 0) \times (1, 1, 0)_{12}$ model having slightly smaller values compared to the other two models.
 
 ```{r fig.height = 3, fig.width = 6, fig.cap="Time Series, ACF, PACF Plots of Residuals"}
 ggtsdisplay(q1.sarima.000.110$residuals, points = FALSE, lag.max = 27,
             main = "Time Series, ACF, PACF Plots of SARIMA(0,0,0)(1,1,0)[12] Residuals")
 ```
 
-The residual plots of the three models are very similar. Here, we included the residual plots of the regression with ARIMA(0,0,0)(1,1,0)[12] errors in Figure 11 for reference. We notice that even after accounting for seasonal AR or MA components, there still seem to be autocorrelation in the residuals. Specifically, we observe a spike at lag 1 that exceeds the dashed blue line in the PACF plots with $P = 0$ [Figure 10] or $P = 1$ [Figure 11]. This suggests a possible non-seasonal AR(1) component (i.e. $p = 1$) [@PACF_lag_1].
+The residual plots of the three models are very similar. Here, we included the residual plots of the regression with ARIMA(0,0,0)(1,1,0)[12] errors in Figure 11 for reference. We notice that even after accounting for seasonal AR or MA components, there still seem to be autocorrelation in the residuals. Specifically, we observe a spike at lag 1 that exceeds the dashed blue line in the PACF plot. This suggests a possible non-seasonal AR(1) component (i.e. $p = 1$) [@PACF_lag_1].
 
 As a next step, we would like to fit three additional regressions with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$, $(1, 0, 0) \times (1, 1, 0)_{12}$, and $(1, 0, 0) \times (0, 1, 1)_{12}$, respectively. 
 
@@ -553,7 +553,7 @@ q1.p.table = cbind(c(1, 1, 1), c(0, 0, 0), c(0, 0, 0), c(0, 1, 0), c(1, 1, 1), c
 kable(q1.p.table, digits = 3, caption = "Lowest Model Selection Criterion Values for SARIMA(1,0,0)(0,1,0)[12]", col.names = c('p', 'd', 'q', 'P', 'D', 'Q', 'AIC', 'AICc', 'BIC'))
 ```
 
-According to Table 7, the criteria values for the three models are all much lower than before. The values are very similar, with the $(1, 0, 0) \times (0, 1, 0)_{12}$ model having slightly smaller values compared to the other two models.
+According to Table 7, the criterion values for the three models are almost half of the previous values. The values among the models are very similar, with the $(1, 0, 0) \times (0, 1, 0)_{12}$ model having slightly smaller values compared to the other two models and being the most parsimonious.
 
 ```{r fig.height = 3, fig.width = 6, fig.cap="Time Series, ACF, PACF Plots of Residuals"}
 ggtsdisplay(q1.sarima.100.010$residuals, points = FALSE, lag.max = 27,
@@ -579,10 +579,10 @@ lines(ts(old_monthly_conventional_volume))
 axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2018'))
 ```
 
-Figure 13 shows the actual sales volume from January 2015 to March 2018 in black and the predicted sales volume from April 2017 to March 2018 in blue The shaded region represents the 95% confidence interval of the prediction. We notice that the actual sales volume from April 2017 to March 2018 are largely covered by the shaded region.
+Figure 13 shows the actual sales volume from January 2015 to March 2018 in black and the predicted sales volume from April 2017 to March 2018 in blue. The shaded region represents the 95% confidence interval of the prediction. We notice that the actual sales volume from April 2017 to March 2018 are largely covered by the shaded region.
 
 ### Model Assumptions
-As shown in Figure 14, the plot in the upper panel is the residuals vs. time plot. The first 12 residuals seem to be 0; this is due to the 12-month seasonal differencing in the seasonal component of the SARIMA model. The rest of the residuals roughly have a mean of zero and constant variance as the residuals as mostly between -1 and 1. The ACF plot of the residuals show that the autocorrelation of the residuals are very close to zero (between -0.2 and 0.2), suggesting that the residuals are not very correlated. We observe that all the spikes in the ACF are between the blue dashed lines, suggesting no severe autocorrelation. Lastly, the residuals seem to be roughly normally distributed. Again, the spike of residuals at 0 are due to the seasonal differencing. We conclude that our selected SARIMA model for the error terms $(1, 0, 0) \times (0, 1, 0)_{12}$ satisfies all the model assumptions [@SARIMA_assumptions].
+As shown in Figure 14, the plot in the upper panel is the residuals vs. time plot. The first 12 residuals seem to be 0; this is due to the 12-month seasonal differencing in the seasonal component of the SARIMA model. The rest of the residuals roughly have a mean of zero and constant variance as the residuals as mostly between -1 and 1. The ACF plot of the residuals show that the autocorrelation of the residuals are very close to zero (between -0.2 and 0.2), suggesting that the residuals are not very correlated. We observe that all the spikes in the ACF plot are between the blue dashed lines, suggesting no severe autocorrelation. Lastly, the residuals seem to be roughly normally distributed. The spike of residuals at 0 are due to the seasonal differencing. We conclude that our selected SARIMA model for the error terms $(1, 0, 0) \times (0, 1, 0)_{12}$ satisfies all the model assumptions [@SARIMA_assumptions].
 
 
 ```{r fig.height = 3, fig.width = 6, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
@@ -614,7 +614,7 @@ As mentioned in Section 3.1, we would like to potentially use the sales volume a
 
 $$\text{Per-Unit Price}_i = \beta_0 + \beta_1 \ \text{Sales Volume}_i + \beta_2 \ \text{Unemployment Rate}_i  + \epsilon_i, \: \epsilon_i \stackrel{i.i.d.}{\sim} \mathcal{N}(0, \sigma^2)$$ 
 
-As we check for OLS model assumptions, we once again noticed some patterns in the residual plots. In Figure ?a, we noticed a fanning pattern in the residuals vs. fitted values plot, suggesting potential heteroscedasticity. On the other hand, in Figure ?b, the residuals seem to be correlated over time.
+As we check for OLS model assumptions, we once again noticed some patterns in the residual plots. In Figure 15a, we noticed a fanning pattern in the residuals vs. fitted values plot, suggesting potential heteroscedasticity. In Figure 15b, the residuals seem to be correlated over time.
 
 ```{r fig.height = 3.5, fig.width = 8, fig.cap="(a) Residuals vs. Fitted Values Plot and (b) Residuals vs. Time Plot"}
 # https://datavoreconsulting.com/post/spacing-of-panel-figures-in-r/
@@ -628,7 +628,8 @@ main = "(b) Potential Seasonal Patterns in\nResiduals vs. Time plot", cex.main=0
 axis(1, at = c(1, 13, 25, 37), labels = c('01/2015', '01/2016', '01/2017', '01/2018'))
 ```
 
-To further investigate these patterns in the residuals, we use the \texttt{decompose()} function in R to compute and plot the seasonal effects. As presented in Figure ?, there seems to be a seasonal pattern that is repeated yearly.
+\newpage
+To further investigate these patterns in the residuals, we use the \texttt{decompose()} function in R to compute and plot the seasonal effects. As presented in Figure 16, there seems to be a seasonal pattern that is repeated yearly.
 
 ```{r fig.height = 2.5, fig.width = 6, fig.cap="Seasonal Panel of Decomposition Plot"}
 q2.sa.lm2.residuals = ts(residuals(q2.sa.lm2), frequency = 12)
@@ -688,8 +689,10 @@ kable(q2.sa.table, digits = 3, caption = "Comparing Models", col.names = c('p', 
 ```
 
 
-Here we follow a similar parameter selection procedure as detailed in Section 5.2.3. The selected models and their corresponding model selection criterion values are shown in Table ?. Interestingly, the AIC, AICc, and BIC values for these models are very similar (except for the first model). The two models with comparatively smaller criterion values are regression models with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ and $(1, 0, 0) \times (1, 1, 0)_{12}$. We attempt both and compare their prediction results.
+Here we follow a similar parameter selection procedure as detailed in Section 5.2.3. The selected models and their corresponding model selection criterion values are shown in Table 8. Interestingly, the AIC, AICc, and BIC values for these models are very similar (except for the first model). The two models with comparatively smaller criterion values are regression models with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ and $(1, 0, 0) \times (1, 1, 0)_{12}$. We attempt both and compare their prediction results.
 
+
+\newpage
 ```{r fig.height = 3.5, fig.width = 9, fig.cap="Predicting Avocado Per-Unit Price from April 2017 to March 2018"}
 q2.sa.sarima.100.010.pred = predict(q2.sa.sarima.100.010, newxreg=q2.sa.covariates.mat[28:39],  n.ahead=12)
 q2.sa.sarima.100.110.pred = predict(q2.sa.sarima.100.110, newxreg=q2.sa.covariates.mat[28:39],  n.ahead=12)
@@ -738,7 +741,7 @@ legend("topright", legend = c("Actual", "Predicted\n(1,0,0)(1,1,0)[12]", "Previo
 # lines(ts(old_monthly_conventional_volume))}
 ```
 
-We notice that the prediction made by the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ [Figure ?(b)] seems to be closer to the actual values than that made by regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ [Figure ?(a)]. Specifically, the prediction shown in Figure ?(a) seem to always under-predict the per-unit price. Nonetheless, the two predictions seem to be very similar, and both seem to be much closer to the actual values than simply using the last year's results. 
+We notice that the prediction made by the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ [Figure 18(b)] seems to be closer to the actual values than that made by regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ [Figure 18(a)]. Specifically, the prediction shown in Figure 18(a) seem to always under-predict the per-unit price. Nonetheless, the two predictions seem to be very similar, and both seem to be much closer to the actual values than simply using the last year's results. 
 
 ```{r}
 q2.sa.names = rbind("Per-Unit Price Prediction (1,0,0)(0,1,0)[12]", 
@@ -753,9 +756,9 @@ q2.sa.table = data.frame(cbind(q2.sa.names, q2.sa.values))
 kable(q2.sa.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
 ```
 
-As shown in Table ?, the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ indeed seem to have the smallest RMSE value, though the RMSE value of the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ is very similar. Both of these models have lower RMSE values than the model in Section 3, which yields an RMSE value of 0.167. This suggests that some information about the volume or demand for avocados might potentially improve the prediction. As mentioned in Section 3.1, the problem with this approach is that we would not know the sales volume when we do not know the price. Thus, such a prediction might not be feasible in reality. However, if we have access to a plausible projection of the demand for avocados or the actual production volume data, we might use them to better predict the per-unit price.
+As shown in Table 9, the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ indeed seem to have the smallest RMSE value, though the RMSE value of the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ is very similar. Both of these models have lower RMSE values than the model in Section 3, which yields an RMSE value of 0.167. This suggests that some information about the volume or demand for avocados might potentially improve the prediction. As mentioned in Section 3.1, the problem with this approach is that we would not know the sales volume when we do not know the price. Thus, such a prediction might not be feasible in reality. However, if we have access to a plausible projection of the demand for avocados or the actual production volume data, we might use them to better predict the per-unit price.
 
-Now we check for model assumptions. In Figure ?, we see some of the residual plots for the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$. The corresponding residual plots for the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ are largely similar. In the upper panel of Figure ? is the residuals vs. time plot. Besides the first 12 residuals being 0 due to seasonal differencing, the remaining residuals seem to roughly have a mean of zero and constant variance. There seem to no severe autocorrelation among the residuals, since the spikes in the ACF plot are all between the blue dashed lines. In addition, the residuals seem to be largely normally distributed as shown in the bottom right plot. Thus, we conclude that the regression model with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ satisfies the model assumptions [@SARIMA_assumptions].
+Now we check for model assumptions. In Figure 19, we see the residual plots for the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$. The corresponding residual plots for the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ are largely similar. In the upper panel of Figure 19 is the residuals vs. time plot. Besides the first 12 residuals being zero due to seasonal differencing, the remaining residuals seem to roughly have a mean of zero and constant variance. There seems to be no severe autocorrelation among the residuals, since the spikes in the ACF plot are all between the blue dashed lines. In addition, the residuals seem to be largely normally distributed as shown in the bottom right plot. Thus, we conclude that the regression model with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ satisfies the model assumptions [@SARIMA_assumptions].
 
 
 ```{r fig.height = 3, fig.width = 6, fig.cap="Residuals Check of the SARIMA Model for the Error Terms"}
@@ -771,7 +774,21 @@ We observe the residual plots for the regression with unemployment rate as the p
 checkresiduals(q2.sarima, test = F)
 ```
 
-## Example of Analysis on Weekly Version of the Data
+## Example of Analysis on the Weekly Version of the Data
+
+We have conducted similar analyses on the weekly version of the avocado data. Since the external macroeconomic data are collected on a monthly basis, we did not include them as predictors. This means that, for instance, if we are predicting the weekly sales volume, we are only using the weekly per-unit price as the predictor.
+
+Figure 21 shows the sales volume prediction from April 2017 to March 2018 using the regression with SARIMA $(1, 1, 1) \times (0, 1, 1)_{52}$. The model is specified as follows:
+
+$$\text{Sales Volume}_t = \beta_0 + \beta_1 \ \text{Per-Unit Price}_t + n_t$$
+where
+
+$$(1-\phi_1L)(1-L^{52})(1-L)\ n_t = (1+\Theta_1L)(1+\theta_1L)\ a_t, \: a_t \stackrel{i.i.d.}{\sim} \mathcal{N}(0, \sigma^2)$$. 
+
+$\phi_1$ denotes the non-seasonal order-1 autoregressive parameter, $\theta_1$ represents the non-seasonal moving average parameter, and $\Theta_1$ denotes the seasonal order-1 moving average parameter. $L$ is the lag operator and $a_t$ is the white noise.
+
+Interestingly, although the weekly data seem to be slightly noisier, the prediction is fairly close to the actual results, with an RMSE of 1.460. 
+
 ```{r fig.height = 4, fig.width = 5.5, fig.cap="Predicting the Per-Unit Price of Avocados from April 2017 to March 2018"}
 
 old_weekly_conventional_volume = ts(df_old.total.weekly.conventional$Total.Volume.Million, start = c(2015, 1), frequency = 12)
@@ -796,12 +813,12 @@ matplot(1:52,
         xlab = "Weeks", 
         ylab = "Sales Volume (in Millions)", 
         xaxt="n",
-        main = "One-Year Sales volume Prediction",
+        main = "One-Year Sales Volume Prediction Using Weekly Data",
         cex.main=0.85,
         cex.axis=0.8,
         cex.lab=0.8)
 axis(1, at = c(1, 49), labels = c('W1\n04/2017', 'W1\n03/2018'), cex.axis=0.8, cex.lab=0.8)
-legend("bottomleft", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
+legend("topleft", legend = c("Actual", "Predicted", "Previous Year"), col = 1:3, lty = 1:3, cex = 0.75)
 
 # q1.sarima.forecast = forecast(q1.sarima, xreg=q1.covariates.mat[28:39], h=12, level = c(95))
 # {plot(q1.sarima.forecast, main = "One-Year Prediction of Per-Unit Price with 95% CI", xlab = 'Months (01/2015-03/2018)\n(Total Time Span)')
@@ -809,8 +826,9 @@ legend("bottomleft", legend = c("Actual", "Predicted", "Previous Year"), col = 1
 ```
 
 ```{r}
+# Keep trailing zeros: https://stackoverflow.com/questions/5458729/keeping-trailing-zeros
 q3.names = rbind("Sales Volume Prediction", "Sales Volume from Previous Year")
-q3.values = rbind(round(accuracy(object = q3.sarima.pred$pred, x = old_weekly_conventional_volume[118:169])[,2],3),
+q3.values = rbind(sprintf("%.3f", round(accuracy(object = q3.sarima.pred$pred, x = old_weekly_conventional_volume[118:169])[,2],3)),
   round(accuracy(object = old_weekly_conventional_volume[66:117], x = old_weekly_conventional_volume[118:169])[,2],3))
 
 q3.table = data.frame(cbind(q3.names, q3.values))
