@@ -259,13 +259,13 @@ q1.values = rbind(round(accuracy(object = q1.sarima.pred$pred, x = old_monthly_c
 
 q1.table = data.frame(cbind(q1.names, q1.values))
 
-kable(q1.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+kable(q1.table, caption = "RMSE Comparison", col.names = c("Type", "RMSE"), align = c('l', 'r'))
 ```
 
 
 ## Interpretation and Conclusion
 
-Figure 3 shows the prediction results. (The corresponding plot with uncertainty [Figure 13] is included in Appendix 5.2.4.) The red dashed line in Figure 3 shows the predicted sales volume from April 2017 to March 2018 while the black line shows the actual sales volume during the same time period. The green dotted line represents the sales volume in the previous year (i.e. from April 2016 to March 2017). If we do not fit a model and simply use the sales volumes from the previous year, we could still roughly approximate the sales volumes. However, our predicted values seem to match more closely with the actual sales volumes. A commonly used metric to evaluate forecast accuracy is the Root Mean Square Error (RMSE) [@Forecast_evaluation]. RMSE is said to be the standard deviation of the prediction errors [@RMSE_definition]. In general, we prefer smaller RMSE values. 
+Figure 3 shows the prediction results. (The corresponding plot with uncertainty [Figure 13] is included in Appendix 5.2.4.) The red dashed line in Figure 3 shows the predicted sales volume from April 2017 to March 2018 while the black line shows the actual sales volume during the same time period. The green dotted line represents the sales volume in the previous year (i.e. from April 2016 to March 2017). If we do not fit a model and simply use the sales volumes from the previous year, we could still roughly approximate the sales volumes. However, our predicted values seem to match more closely with the actual sales volumes. A commonly used metric to evaluate forecast accuracy is the Root Mean Square Error (RMSE) [@Forecast_evaluation]. RMSE values are always non-negative. In general, we prefer RMSE values that are closer to 0. 
 
 The RMSE of our prediction is approximately 2.085, which is smaller than an RMSE of 4.115 if we simply use the previous year's sales volume. In the context of this analysis, this means that 2.085 is the square root of the mean of squared differences between the actual sales volumes and our predicted sales volumes [@RMSE_interpretation]. One advantage of the RMSE metric is that it has the same unit as the response variable [@RMSE_units]; in this case, the unit is millions of avocados. While an RMSE of 2.085 million avocados is a considerably large quantity, we recall that our response variable is the total number of avocados sold in the U.S. as a whole. In addition, as shown in Figure 3, the actual sales volume in one year can range from around 25 to 45 million avocados. Thus, we consider an RMSE of 2.085 million avocados an acceptable value in this context and conclude that we have made a reasonable prediction using our limited data.
 
@@ -378,7 +378,7 @@ q2.values = rbind(round(accuracy(object = q2.sarima.pred$pred, x = old_monthly_c
 
 q2.table = data.frame(cbind(q2.names, q2.values))
 
-kable(q2.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+kable(q2.table, caption = "RMSE Comparison", col.names = c("Type", "RMSE"), align = c('l', 'r'))
 ```
 
 ## Interpretation and Conclusion
@@ -399,7 +399,7 @@ One of the main strengths of this analysis is that we have accounted for the aut
 
 Beyond the limitation in our data, there is another important limitation with a regression model approach: if we want to make predictions about the future (instead of the known 04/2017-03/2018 time period), we would need the future data for our predictors. The actual values are certainly not accessible, but we can potentially obtain plausible predictions. For instance, organizations such as the Federal Reserve releases their forecasts of marcoeconomic measures including the unemployment rate [@Unemployment_rate_projections]. We can use these prejections to predict the per-unit prices and subsequently use our predicted prices to forecast the sales volume.
 
-An interesting extension of this study would be to collect and use avocado data in the last two years to investigate the avocado retail sales before and during the pandemic. 2019 is a special year because earlier that year, tariffs and transportation-related delays contributed to avocado supply chain disruptions. Avocado prices in the first half of 2019 were unusually high as a consequence [@Transportation_disruption;@Tariffs_disruption]. On the other hand, the avocado industry is remarkably resilient during the pandemic. It is said that the demand for avocados surged during the pandemic since people are paying more attention to their health and wellness, and more people are cooking at home [@Pandemic_proof]. In either case, the prediction problem would be slightly more challenging as we would likely under-predict the price and/or the sales volume. 
+An interesting extension of this study would be to collect and use avocado data in the last two years to investigate the avocado retail sales before and during the pandemic. 2019 is a special year because earlier that year, tariffs and transportation-related delays contributed to avocado supply chain disruptions. Avocado prices in the first half of 2019 were unusually high as a consequence [@Transportation_disruption;@Tariffs_disruption]. On the other hand, the avocado industry is remarkably resilient during the pandemic. It is said that the demand for avocados surged during the pandemic since people are paying more attention to their health and wellness, and more people are cooking at home [@Pandemic_proof]. A previous study [@Forecasting] might be relevant as the researchers were predicting the avocado prices in the 2009-2010 season in the midst of an economic crisis. The study incorporated annual data of per capita avocado consumption and disposable income as predictors in a multiple regression model. Inspired by this approach, we believe that incorporating avocado consumption data as a proxy for demand and accounting for income-related data (e.g. economic impact payments) might help better inform the predictions for 2019 and 2020.
 
 \newpage
 # Appendix
@@ -753,7 +753,7 @@ q2.sa.values = rbind(round(accuracy(object = q2.sa.sarima.100.010.pred$pred, x =
 
 q2.sa.table = data.frame(cbind(q2.sa.names, q2.sa.values))
 
-kable(q2.sa.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+kable(q2.sa.table, caption = "RMSE Comparison", col.names = c("Type", "RMSE"), align = c('l', 'r'))
 ```
 
 As shown in Table 9, the regression with SARIMA errors $(1, 0, 0) \times (1, 1, 0)_{12}$ indeed seem to have the smallest RMSE value, though the RMSE value of the regression with SARIMA errors $(1, 0, 0) \times (0, 1, 0)_{12}$ is very similar. Both of these models have lower RMSE values than the model in Section 3, which yields an RMSE value of 0.167. This suggests that some information about the volume or demand for avocados might potentially improve the prediction. As mentioned in Section 3.1, the problem with this approach is that we would not know the sales volume when we do not know the price. Thus, such a prediction might not be feasible in reality. However, if we have access to a plausible projection of the demand for avocados or the actual production volume data, we might use them to better predict the per-unit price.
@@ -833,7 +833,7 @@ q3.values = rbind(sprintf("%.3f", round(accuracy(object = q3.sarima.pred$pred, x
 
 q3.table = data.frame(cbind(q3.names, q3.values))
 
-kable(q3.table, caption = "RMSE Outputs", col.names = c("Type", "RMSE"), align = c('l', 'r'))
+kable(q3.table, caption = "RMSE Comparison", col.names = c("Type", "RMSE"), align = c('l', 'r'))
 ```
 
 
